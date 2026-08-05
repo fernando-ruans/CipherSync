@@ -1,11 +1,14 @@
 import {create} from 'zustand'
 import {api} from './lib/api'
-import type {Item, Phase, ItemType} from './lib/types'
+import type {Item, ItemType, Phase, VaultInfo} from './lib/types'
 
 interface AppState {
     phase: Phase
+    vaults: VaultInfo[]
+    vaultName: string
     items: Item[]
     selectedId: string | null
+    multiSelected: string[]
     search: string
     category: string
     tag: string
@@ -14,9 +17,12 @@ interface AppState {
     autolockMinutes: number
     defaultType: ItemType
     init: () => Promise<void>
-    setup: (password: string, confirm: string) => Promise<void>
-    unlock: (password: string) => Promise<void>
+    newVault: () => void
+    setup: (name: string, password: string, confirm: string) => Promise<void>
+    unlock: (file: string, password: string) => Promise<void>
     lock: () => Promise<void>
+    deleteVault: (file: string) => Promise<void>
+    deleteAccount: () => Promise<void>
     loadSettings: () => Promise<void>
     setAutolockMinutes: (minutes: number) => Promise<void>
     setSearch: (s: string) => void
@@ -31,12 +37,22 @@ interface AppState {
     restoreVersion: (versionId: string) => Promise<void>
     importItems: (items: Item[]) => Promise<import('./lib/types').ImportResult>
     refreshItems: () => Promise<void>
+    toggleMulti: (id: string) => void
+    setMulti: (ids: string[], clear?: boolean) => void
+    clearMulti: () => void
+    deleteSelected: () => Promise<void>
+    setCategorySelected: (category: string) => Promise<void>
+    addTagSelected: (tag: string) => Promise<void>
+    toggleFavoriteSelected: () => Promise<void>
 }
 
 export const useApp = create<AppState>((set, get) => ({
     phase: 'loading',
+    vaults: [],
+    vaultName: '',
     items: [],
     selectedId: null,
+    multiSelected: [],
     search: '',
     category: 'all',
     tag: '',
@@ -47,23 +63,29 @@ export const useApp = create<AppState>((set, get) => ({
 
     init: async () => {
         try {
-            const exists = await api.vaultExists()
-            set({phase: exists ? 'unlock' : 'setup'})
+            const vaults = await api.listVaults()
+            set({vaults, phase: vaults.length === 0 ? 'setup' : 'unlock'})
         } catch {
             set({phase: 'setup'})
         }
     },
 
-    setup: async (password, confirm) => {
-        await api.createVault(password, confirm)
-        const items = await api.getItems()
-        set({phase: 'main', items, selectedId: null})
+    newVault: () => {
+        set({phase: 'setup'})
     },
 
-    unlock: async (password) => {
-        await api.openVault(password)
+    setup: async (name, password, confirm) => {
+        await api.createVault(name, password, confirm)
         const items = await api.getItems()
-        set({phase: 'main', items, selectedId: null})
+        const vaultName = await api.getCurrentVaultName()
+        set({phase: 'main', items, vaultName, selectedId: null})
+    },
+
+    unlock: async (file, password) => {
+        await api.openVault(file, password)
+        const items = await api.getItems()
+        const vaultName = await api.getCurrentVaultName()
+        set({phase: 'main', items, vaultName, selectedId: null})
     },
 
     lock: async () => {
@@ -72,8 +94,10 @@ export const useApp = create<AppState>((set, get) => ({
         } finally {
             set({
                 phase: 'unlock',
+                vaultName: '',
                 items: [],
                 selectedId: null,
+                multiSelected: [],
                 search: '',
                 category: 'all',
                 tag: '',
@@ -81,6 +105,29 @@ export const useApp = create<AppState>((set, get) => ({
                 favicons: {},
             })
         }
+    },
+
+    deleteVault: async (file) => {
+        await api.deleteVault(file)
+        const vaults = await api.listVaults()
+        set({vaults, phase: vaults.length === 0 ? 'setup' : 'unlock'})
+    },
+
+    deleteAccount: async () => {
+        await api.deleteAccount()
+        set({
+            phase: 'setup',
+            vaults: [],
+            vaultName: '',
+            items: [],
+            selectedId: null,
+            multiSelected: [],
+            search: '',
+            category: 'all',
+            tag: '',
+            favoritesOnly: false,
+            favicons: {},
+        })
     },
 
     loadSettings: async () => {
@@ -162,5 +209,60 @@ export const useApp = create<AppState>((set, get) => ({
     refreshItems: async () => {
         const items = await api.getItems()
         set({items})
+    },
+
+    toggleMulti: (id) => {
+        set((s) => ({
+            multiSelected: s.multiSelected.includes(id)
+                ? s.multiSelected.filter((x) => x !== id)
+                : [...s.multiSelected, id],
+        }))
+    },
+
+    setMulti: (ids, clear = false) => {
+        if (clear) {
+            set({multiSelected: [...ids]})
+        } else {
+            set((s) => ({multiSelected: [...new Set([...s.multiSelected, ...ids])]}))
+        }
+    },
+
+    clearMulti: () => set({multiSelected: []}),
+
+    deleteSelected: async () => {
+        const ids = [...get().multiSelected]
+        if (ids.length === 0) return
+        await api.deleteItems(ids)
+        await get().refreshItems()
+        set((s) => ({
+            multiSelected: [],
+            selectedId: s.selectedId && get().items.some((i) => i.id === s.selectedId) ? s.selectedId : null,
+        }))
+    },
+
+    setCategorySelected: async (category) => {
+        const ids = [...get().multiSelected]
+        if (ids.length === 0) return
+        await api.setCategoryBatch(ids, category)
+        await get().refreshItems()
+        set({multiSelected: []})
+    },
+
+    addTagSelected: async (tag) => {
+        const ids = [...get().multiSelected]
+        if (ids.length === 0) return
+        await api.addTagBatch(ids, tag)
+        await get().refreshItems()
+        set({multiSelected: []})
+    },
+
+    toggleFavoriteSelected: async () => {
+        const ids = [...get().multiSelected]
+        if (ids.length === 0) return
+        const selected = get().items.filter((i) => ids.includes(i.id))
+        const allFav = selected.length > 0 && selected.every((i) => i.favorite)
+        await api.setFavoriteBatch(ids, !allFav)
+        await get().refreshItems()
+        set({multiSelected: []})
     },
 }))

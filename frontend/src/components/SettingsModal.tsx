@@ -58,11 +58,26 @@ function ThemePicker() {
 export function SettingsModal({onClose}: {onClose: () => void}) {
     const autolockMinutes = useApp((s) => s.autolockMinutes)
     const setAutolockMinutes = useApp((s) => s.setAutolockMinutes)
+    const deleteAccount = useApp((s) => s.deleteAccount)
     const [changePw, setChangePw] = useState(false)
     const [oldPassword, setOldPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [confirm, setConfirm] = useState('')
     const [loading, setLoading] = useState(false)
+    const [confirmingDelete, setConfirmingDelete] = useState(false)
+    const [confirmText, setConfirmText] = useState('')
+    const [deleting, setDeleting] = useState(false)
+
+    async function doDeleteAccount() {
+        setDeleting(true)
+        try {
+            await deleteAccount()
+            onClose()
+        } catch (err) {
+            toast.error(await errorMessage(err))
+            setDeleting(false)
+        }
+    }
 
     async function changePassword() {
         setLoading(true)
@@ -127,9 +142,51 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
 
                 <Section title="Sobre">
                     <p className="text-sm text-soft">
-                        <span className="font-semibold text-ink">LockSync</span> v0.2.0 — gerenciador de senhas
+                        <span className="font-semibold text-ink">LockSync</span> v0.3.0 — gerenciador de senhas
                         open-source. Dados criptografados com AES-256-GCM + Argon2id.
                     </p>
+                </Section>
+
+                <Section title="Zona de perigo">
+                    <p className="mb-2 text-xs text-faint">
+                        Apaga todos os cofres e itens permanentemente, resetando o aplicativo. Esta ação não pode ser desfeita.
+                    </p>
+                    {!confirmingDelete ? (
+                        <Button
+                            variant="danger"
+                            className="w-full border border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                            onClick={() => setConfirmingDelete(true)}
+                        >
+                            Excluir conta e todos os dados
+                        </Button>
+                    ) : (
+                        <div className="space-y-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                            <p className="text-xs text-red-300">
+                                Para confirmar, digite <span className="font-bold">DELETAR TUDO</span> abaixo.
+                            </p>
+                            <Input
+                                value={confirmText}
+                                onChange={setConfirmText}
+                                placeholder="DELETAR TUDO"
+                                autoFocus
+                            />
+                            <div className="flex justify-end gap-2">
+                                <Button variant="ghost" onClick={() => {
+                                    setConfirmingDelete(false)
+                                    setConfirmText('')
+                                }}>
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    className="border border-red-500/40 bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                                    disabled={confirmText !== 'DELETAR TUDO' || deleting}
+                                    onClick={() => void doDeleteAccount()}
+                                >
+                                    {deleting ? 'Apagando...' : 'Apagar permanentemente'}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </Section>
             </div>
         </Modal>

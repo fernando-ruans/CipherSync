@@ -11,10 +11,14 @@ declare global {
 }
 
 export const api = {
-    vaultExists: (): Promise<boolean> => window.go.main.App.VaultExists(),
-    createVault: (password: string, confirm: string): Promise<void> =>
-        window.go.main.App.CreateVault(password, confirm),
-    openVault: (password: string): Promise<void> => window.go.main.App.OpenVault(password),
+    listVaults: (): Promise<import('./types').VaultInfo[]> => window.go.main.App.ListVaults(),
+    createVault: (name: string, password: string, confirm: string): Promise<void> =>
+        window.go.main.App.CreateVault(name, password, confirm),
+    openVault: (file: string, password: string): Promise<void> =>
+        window.go.main.App.OpenVault(file, password),
+    getCurrentVaultName: (): Promise<string> => window.go.main.App.GetCurrentVaultName(),
+    deleteVault: (file: string): Promise<void> => window.go.main.App.DeleteVault(file),
+    deleteAccount: (): Promise<void> => window.go.main.App.DeleteAccount(),
     lock: (): Promise<void> => window.go.main.App.Lock(),
     changeMasterPassword: (oldPassword: string, newPassword: string, confirm: string): Promise<void> =>
         window.go.main.App.ChangeMasterPassword(oldPassword, newPassword, confirm),
@@ -23,6 +27,14 @@ export const api = {
         window.go.main.App.CreateItem(item),
     updateItem: (item: import('./types').Item): Promise<void> => window.go.main.App.UpdateItem(item),
     deleteItem: (id: string): Promise<void> => window.go.main.App.DeleteItem(id),
+    deleteItems: (ids: string[]): Promise<void> => window.go.main.App.DeleteItems(ids),
+    setCategoryBatch: (ids: string[], category: string): Promise<void> =>
+        window.go.main.App.SetCategoryBatch(ids, category),
+    addTagBatch: (ids: string[], tag: string): Promise<void> => window.go.main.App.AddTagBatch(ids, tag),
+    setFavoriteBatch: (ids: string[], favorite: boolean): Promise<void> =>
+        window.go.main.App.SetFavoriteBatch(ids, favorite),
+    exportSelectedCSV: (ids: string[]): Promise<string> => window.go.main.App.ExportSelectedCSV(ids),
+    exportSelectedJSON: (ids: string[]): Promise<string> => window.go.main.App.ExportSelectedJSON(ids),
     generatePassword: (opts: import('./types').PasswordOptions): Promise<string> =>
         window.go.main.App.GeneratePassword(opts),
     generatePassphrase: (words: number): Promise<string> => window.go.main.App.GeneratePassphrase(words),

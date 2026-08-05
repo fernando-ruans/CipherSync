@@ -49,3 +49,9 @@ type ImportResult struct {
 	Preview []Item   `json:"preview"`
 	Errors  []string `json:"errors"`
 }
+
+type VaultInfo struct {
+	Name       string `json:"name"`
+	File       string `json:"file"`
+	LastOpened int64  `json:"lastOpened"`
+}

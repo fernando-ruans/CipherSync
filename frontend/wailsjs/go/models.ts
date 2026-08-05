@@ -109,6 +109,22 @@ export namespace main {
 	        this.excludeAmbiguous = source["excludeAmbiguous"];
 	    }
 	}
+	export class VaultInfo {
+	    name: string;
+	    file: string;
+	    lastOpened: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new VaultInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.file = source["file"];
+	        this.lastOpened = source["lastOpened"];
+	    }
+	}
 	export class VersionEntry {
 	    id: string;
 	    timestamp: number;

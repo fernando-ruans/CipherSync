@@ -16,7 +16,7 @@ Gerenciador de senhas open-source para Windows e Linux, inspirado no 1Password.
 ## Segurança
 
 - **Senha mestra** nunca é armazenada; a chave do cofre é derivada via Argon2id e fica apenas em memória.
-- **Cofre local** (`vault.passapp`) com cada item criptografado individualmente com AES-256-GCM.
+- **Cofres locais** — cada cofre é um arquivo `<nome>.passapp` criptografado, com cada item criptografado individualmente com AES-256-GCM.
 - Chave do cofre é criptografada pela chave derivada da senha mestra (troca de senha não re-criptografa os itens).
 - Chaves e buffers são zerados ao bloquear o cofre.
 - Clipboard limpo automaticamente após 60 segundos.
@@ -46,12 +46,19 @@ Gerenciador de senhas open-source para Windows e Linux, inspirado no 1Password.
 - [x] **Auto-lock** — 1/5/15/30/60 min ou nunca; bloqueia ao minimizar
 - [x] **Atalhos** — `Ctrl+F` busca, `Ctrl+S` salvar, `Ctrl+B` copiar senha, `Ctrl+Shift+C` copiar usuário, `Ctrl+G` gerador (via botão), `Esc` fecha modais
 
+### Fase 3 — Gerenciamento
+
+- [x] **Multi-seleção** — checkboxes na lista, `Ctrl+A` (todos), `Ctrl+Click` (individual), `Shift+Click` (intervalo)
+- [x] **Operações em lote** — excluir (`Ctrl+D`), mover para categoria, adicionar tag, favoritar/desfavoritar e exportar (CSV/JSON) os itens selecionados
+- [x] **Múltiplos cofres** — crie quantos cofres quiser (pessoal, trabalho, família), cada um com sua senha mestra; seletor na tela de desbloqueio e "Trocar de cofre" na sidebar
+- [x] **Exclusão de conta** — apaga todos os cofres e dados, resetando o app; exige digitar `DELETAR TUDO` para confirmar
+
 ## Roadmap
 
-- **Fase 3** — TOTP/2FA, Watchtower, detecção de vazamento (HIBP), saúde das senhas, Windows Hello
-- **Fase 4** — Sincronização pluggable (arquivo, Dropbox, Google Drive, WebDAV) com resolução de conflitos
-- **Fase 5** — Campos customizados, anexos, travel mode, emergency kit, múltiplos cofres, compartilhamento
-- **Fase 6** — System tray, quick access, extensão de navegador, backups, CI/CD
+- **Fase 4** — TOTP/2FA, Watchtower, detecção de vazamento (HIBP), saúde das senhas, Windows Hello
+- **Fase 5** — Sincronização pluggable (arquivo, Dropbox, Google Drive, WebDAV) com resolução de conflitos
+- **Fase 6** — Campos customizados, anexos, travel mode, emergency kit, compartilhamento
+- **Fase 7** — System tray, quick access, extensão de navegador, backups, CI/CD
 
 ## Desenvolvimento
 

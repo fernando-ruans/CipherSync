@@ -1,9 +1,10 @@
 import {useState} from 'react'
 import toast from 'react-hot-toast'
-import {KeyRound, Loader2, Lock, ShieldCheck} from 'lucide-react'
+import {ChevronLeft, KeyRound, Loader2, Lock, Plus, ShieldCheck, Trash2, Vault} from 'lucide-react'
 import {useApp} from '../state'
-import {errorMessage} from '../lib/api'
+import {api, errorMessage} from '../lib/api'
 import {Button, Input, RevealInput, StrengthMeter} from './ui'
+import type {VaultInfo} from '../lib/types'
 
 function Shell({children}: {children: React.ReactNode}) {
     return (
@@ -32,6 +33,7 @@ function LoadingButton({loading, children}: {loading: boolean; children: React.R
 
 export function SetupScreen() {
     const setup = useApp((s) => s.setup)
+    const [name, setName] = useState('')
     const [password, setPassword] = useState('')
     const [confirm, setConfirm] = useState('')
     const [loading, setLoading] = useState(false)
@@ -39,7 +41,7 @@ export function SetupScreen() {
     async function submit() {
         setLoading(true)
         try {
-            await setup(password, confirm)
+            await setup(name, password, confirm)
         } catch (err) {
             toast.error(await errorMessage(err))
         } finally {
@@ -49,14 +51,15 @@ export function SetupScreen() {
 
     return (
         <Shell>
-            <h2 className="mb-1 text-lg font-semibold text-ink">Criar sua senha mestra</h2>
+            <h2 className="mb-1 text-lg font-semibold text-ink">Criar seu cofre</h2>
             <p className="mb-5 text-sm text-mut">
-                Ela protege todo o cofre. <span className="text-soft">Não é possível recuperá-la.</span>
+                Ele é protegido pela sua senha mestra. <span className="text-soft">Não é possível recuperá-la.</span>
             </p>
             <form onSubmit={(e) => {
                 e.preventDefault()
                 void submit()
             }} className="space-y-4">
+                <Input label="Nome do cofre" value={name} onChange={setName} placeholder="e.g. Pessoal, Trabalho, Família" autoFocus/>
                 <div>
                     <RevealInput label="Senha mestra" value={password} onChange={setPassword}/>
                     <StrengthMeter password={password}/>
@@ -79,15 +82,60 @@ export function SetupScreen() {
     )
 }
 
+function VaultCard({vault, selected, onSelect, onDelete}: {
+    vault: VaultInfo
+    selected: boolean
+    onSelect: () => void
+    onDelete: () => void
+}) {
+    const last = vault.lastOpened ? new Date(vault.lastOpened).toLocaleDateString('pt-BR') : 'nunca'
+    return (
+        <div
+            onClick={onSelect}
+            className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                selected ? 'border-indigo-500/60 bg-accent/10' : 'border-edge bg-input hover:bg-hover'
+            }`}
+        >
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-accent/20 text-accent' : 'bg-white/5 text-mut'}`}>
+                <Vault size={18}/>
+            </div>
+            <div className="min-w-0 flex-1">
+                <div className={`truncate text-sm font-semibold ${selected ? 'text-accent' : 'text-soft'}`}>
+                    {vault.name}
+                </div>
+                <div className="text-xs text-faint">Último acesso: {last}</div>
+            </div>
+            <button
+                type="button"
+                title="Excluir cofre"
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onDelete()
+                }}
+                className="text-faint transition-colors hover:text-red-400"
+            >
+                <Trash2 size={16}/>
+            </button>
+        </div>
+    )
+}
+
 export function UnlockScreen() {
+    const vaults = useApp((s) => s.vaults)
     const unlock = useApp((s) => s.unlock)
+    const newVault = useApp((s) => s.newVault)
+    const deleteVault = useApp((s) => s.deleteVault)
+    const [selectedFile, setSelectedFile] = useState<string | null>(null)
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
 
+    const selected = vaults.find((v) => v.file === selectedFile) ?? null
+
     async function submit() {
+        if (!selected) return
         setLoading(true)
         try {
-            await unlock(password)
+            await unlock(selected.file, password)
         } catch (err) {
             toast.error(await errorMessage(err))
             setPassword('')
@@ -96,26 +144,72 @@ export function UnlockScreen() {
         }
     }
 
+    function confirmDelete(vault: VaultInfo) {
+        if (confirm(`Excluir o cofre "${vault.name}"? Todos os itens serão apagados permanentemente.`)) {
+            void deleteVault(vault.file)
+        }
+    }
+
     return (
         <Shell>
-            <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-ink">
-                <KeyRound size={18} className="text-accent"/> Desbloquear cofre
-            </h2>
-            <p className="mb-5 text-sm text-mut">Digite sua senha mestra para continuar.</p>
-            <form onSubmit={(e) => {
-                e.preventDefault()
-                void submit()
-            }} className="space-y-4">
-                <Input
-                    label="Senha mestra"
-                    type="password"
-                    value={password}
-                    onChange={setPassword}
-                    autoFocus
-                    onEnter={() => void submit()}
-                />
-                <LoadingButton loading={loading}>Desbloquear</LoadingButton>
-            </form>
+            {!selected ? (
+                <>
+                    <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-ink">
+                        <Vault size={18} className="text-accent"/> Seus cofres
+                    </h2>
+                    <p className="mb-5 text-sm text-mut">Selecione um cofre para desbloquear.</p>
+
+                    {vaults.length === 0 ? (
+                        <p className="py-4 text-center text-sm text-faint">Nenhum cofre ainda.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {vaults.map((v) => (
+                                <VaultCard
+                                    key={v.file}
+                                    vault={v}
+                                    selected={false}
+                                    onSelect={() => setSelectedFile(v.file)}
+                                    onDelete={() => confirmDelete(v)}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    <Button variant="subtle" className="mt-4 w-full" onClick={newVault}>
+                        <Plus size={16}/> Criar novo cofre
+                    </Button>
+                </>
+            ) : (
+                <>
+                    <button
+                        onClick={() => {
+                            setSelectedFile(null)
+                            setPassword('')
+                        }}
+                        className="mb-3 flex items-center gap-1 text-xs text-mut transition-colors hover:text-ink"
+                    >
+                        <ChevronLeft size={14}/> Todos os cofres
+                    </button>
+                    <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-ink">
+                        <KeyRound size={18} className="text-accent"/> {selected.name}
+                    </h2>
+                    <p className="mb-5 text-sm text-mut">Digite sua senha mestra para desbloquear.</p>
+                    <form onSubmit={(e) => {
+                        e.preventDefault()
+                        void submit()
+                    }} className="space-y-4">
+                        <Input
+                            label="Senha mestra"
+                            type="password"
+                            value={password}
+                            onChange={setPassword}
+                            autoFocus
+                            onEnter={() => void submit()}
+                        />
+                        <LoadingButton loading={loading}>Desbloquear</LoadingButton>
+                    </form>
+                </>
+            )}
         </Shell>
     )
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -559,6 +560,87 @@ func (v *Vault) setSetting(key, value string) error {
 	return err
 }
 
+// ---------- Batch operations ----------
+
+func (v *Vault) deleteItems(ids []string) error {
+	if v.vaultKey == nil {
+		return ErrVaultLocked
+	}
+	valid := []string{}
+	keep := make([]Item, 0, len(v.items))
+	for _, it := range v.items {
+		if contains(ids, it.ID) {
+			valid = append(valid, it.ID)
+		} else {
+			keep = append(keep, it)
+		}
+	}
+	for _, id := range valid {
+		if _, err := v.db.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
+			return err
+		}
+		_, _ = v.db.Exec(`DELETE FROM item_versions WHERE item_id = ?`, id)
+	}
+	v.items = keep
+	v.itemsBy = map[string]*Item{}
+	for i := range v.items {
+		v.itemsBy[v.items[i].ID] = &v.items[i]
+	}
+	return nil
+}
+
+func (v *Vault) setCategoryBatch(ids []string, category string) error {
+	for i := range v.items {
+		if contains(ids, v.items[i].ID) {
+			v.items[i].Category = category
+			if err := v.persistItem(v.items[i]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (v *Vault) addTagBatch(ids []string, tag string) error {
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	if tag == "" {
+		return errors.New("tag cannot be empty")
+	}
+	for i := range v.items {
+		if contains(ids, v.items[i].ID) {
+			if !contains(v.items[i].Tags, tag) {
+				v.items[i].Tags = append(v.items[i].Tags, tag)
+				if err := v.persistItem(v.items[i]); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (v *Vault) setFavoriteBatch(ids []string, favorite bool) error {
+	for i := range v.items {
+		if contains(ids, v.items[i].ID) {
+			v.items[i].Favorite = favorite
+			if err := v.persistItem(v.items[i]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (v *Vault) itemsByIDs(ids []string) []Item {
+	out := []Item{}
+	for _, it := range v.items {
+		if contains(ids, it.ID) {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
 func (v *Vault) getSetting(key string) (string, error) {
 	if v.db == nil {
 		return "", ErrVaultLocked
@@ -572,4 +654,13 @@ func (v *Vault) getSetting(key string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }

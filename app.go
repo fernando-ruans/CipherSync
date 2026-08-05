@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,10 +18,12 @@ const clipboardClearDelay = 60 * time.Second
 
 // App is the root application object exposed to the frontend.
 type App struct {
-	ctx      context.Context
-	vault    *Vault
-	clipMu   sync.Mutex
-	clipStop chan struct{}
+	ctx       context.Context
+	vault     *Vault
+	vaultFile string
+	vaultName string
+	clipMu    sync.Mutex
+	clipStop  chan struct{}
 }
 
 // NewApp creates a new App application struct.
@@ -34,19 +37,18 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// VaultPath returns the default vault file path.
-func (a *App) VaultPath() string {
+// VaultDir returns the directory that stores all vault files.
+func (a *App) VaultDir() string {
 	cfg, err := os.UserConfigDir()
 	if err != nil {
-		return "vault.passapp"
+		return filepath.Join(".", "locksync")
 	}
-	return filepath.Join(cfg, "LockSync", "vault.passapp")
+	return filepath.Join(cfg, "LockSync")
 }
 
-// VaultExists reports whether a vault already exists at the default path.
-func (a *App) VaultExists() bool {
-	_, err := os.Stat(a.VaultPath())
-	return err == nil
+// ListVaults returns the available vaults, most recently used first.
+func (a *App) ListVaults() ([]VaultInfo, error) {
+	return listVaultsIn(a.VaultDir())
 }
 
 // IsUnlocked reports whether a vault is currently unlocked.
@@ -54,10 +56,14 @@ func (a *App) IsUnlocked() bool {
 	return a.vault != nil && a.vault.vaultKey != nil
 }
 
-// CreateVault creates a new vault with the given master password and unlocks it.
-func (a *App) CreateVault(password, confirm string) error {
+// CreateVault creates a new named vault with the given master password and unlocks it.
+func (a *App) CreateVault(name, password, confirm string) error {
 	if a.IsUnlocked() {
 		return errors.New("a vault is already unlocked")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("give the vault a name")
 	}
 	if len(password) < 8 {
 		return errors.New("master password must be at least 8 characters")
@@ -65,27 +71,83 @@ func (a *App) CreateVault(password, confirm string) error {
 	if password != confirm {
 		return errors.New("passwords do not match")
 	}
-	v, err := createVault(a.VaultPath(), password)
+	if err := os.MkdirAll(a.VaultDir(), 0o700); err != nil {
+		return err
+	}
+	base := slugify(name)
+	file := base + ".passapp"
+	path := filepath.Join(a.VaultDir(), file)
+	for i := 2; fileExists(path); i++ {
+		file = base + "-" + strconv.Itoa(i) + ".passapp"
+		path = filepath.Join(a.VaultDir(), file)
+	}
+	v, err := createVault(path, password)
 	if err != nil {
 		return err
 	}
+	if err := v.setSetting("vault_name", name); err != nil {
+		v.close()
+		return err
+	}
 	a.vault = v
+	a.vaultFile = file
+	a.vaultName = name
 	return nil
 }
 
-// OpenVault unlocks the existing vault with the given master password.
-func (a *App) OpenVault(password string) error {
+// OpenVault unlocks an existing vault file with the given master password.
+func (a *App) OpenVault(file, password string) error {
 	if a.IsUnlocked() {
 		return errors.New("a vault is already unlocked")
+	}
+	if file == "" {
+		return errors.New("select a vault")
 	}
 	if len(password) == 0 {
 		return errors.New("enter your master password")
 	}
-	v, err := openVault(a.VaultPath(), password)
+	path := filepath.Join(a.VaultDir(), file)
+	v, err := openVault(path, password)
 	if err != nil {
 		return err
 	}
 	a.vault = v
+	a.vaultFile = file
+	if name, err := readVaultName(path); err == nil && name != "" {
+		a.vaultName = name
+	} else {
+		a.vaultName = strings.TrimSuffix(file, ".passapp")
+	}
+	return nil
+}
+
+// GetCurrentVaultName returns the display name of the unlocked vault.
+func (a *App) GetCurrentVaultName() string {
+	if a.vaultName == "" && a.vaultFile != "" {
+		return strings.TrimSuffix(a.vaultFile, ".passapp")
+	}
+	return a.vaultName
+}
+
+// DeleteVault removes a vault file from disk.
+func (a *App) DeleteVault(file string) error {
+	if a.IsUnlocked() {
+		a.Lock()
+	}
+	path := filepath.Join(a.VaultDir(), file)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// DeleteAccount wipes every vault and all app data, resetting to first-run.
+func (a *App) DeleteAccount() error {
+	a.Lock()
+	err := os.RemoveAll(a.VaultDir())
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	return nil
 }
 
@@ -109,6 +171,8 @@ func (a *App) Lock() {
 		a.vault.close()
 	}
 	a.vault = nil
+	a.vaultFile = ""
+	a.vaultName = ""
 }
 
 // GetItems returns all items of the unlocked vault.
@@ -141,6 +205,54 @@ func (a *App) DeleteItem(id string) error {
 		return ErrVaultLocked
 	}
 	return a.vault.delete(id)
+}
+
+// DeleteItems removes multiple items from the vault.
+func (a *App) DeleteItems(ids []string) error {
+	if !a.IsUnlocked() {
+		return ErrVaultLocked
+	}
+	return a.vault.deleteItems(ids)
+}
+
+// SetCategoryBatch sets the category of multiple items.
+func (a *App) SetCategoryBatch(ids []string, category string) error {
+	if !a.IsUnlocked() {
+		return ErrVaultLocked
+	}
+	return a.vault.setCategoryBatch(ids, category)
+}
+
+// AddTagBatch adds a tag to multiple items.
+func (a *App) AddTagBatch(ids []string, tag string) error {
+	if !a.IsUnlocked() {
+		return ErrVaultLocked
+	}
+	return a.vault.addTagBatch(ids, tag)
+}
+
+// SetFavoriteBatch marks multiple items as favorite or not.
+func (a *App) SetFavoriteBatch(ids []string, favorite bool) error {
+	if !a.IsUnlocked() {
+		return ErrVaultLocked
+	}
+	return a.vault.setFavoriteBatch(ids, favorite)
+}
+
+// ExportSelectedCSV returns selected items as CSV text.
+func (a *App) ExportSelectedCSV(ids []string) (string, error) {
+	if !a.IsUnlocked() {
+		return "", ErrVaultLocked
+	}
+	return exportCSV(a.vault.itemsByIDs(ids)), nil
+}
+
+// ExportSelectedJSON returns selected items as JSON text.
+func (a *App) ExportSelectedJSON(ids []string) (string, error) {
+	if !a.IsUnlocked() {
+		return "", ErrVaultLocked
+	}
+	return exportJSON(a.vault.itemsByIDs(ids))
 }
 
 // GeneratePassword creates a random password according to the given options.

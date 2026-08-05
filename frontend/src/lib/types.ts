@@ -48,20 +48,35 @@ export interface VaultSettings {
     defaultType: string
 }
 
+export interface VaultInfo {
+    name: string
+    file: string
+    lastOpened: number
+}
+
 export type Phase = 'loading' | 'setup' | 'unlock' | 'main'
 
 export interface AppApi {
-    VaultPath(): Promise<string>
-    VaultExists(): Promise<boolean>
+    VaultDir(): Promise<string>
+    ListVaults(): Promise<VaultInfo[]>
     IsUnlocked(): Promise<boolean>
-    CreateVault(password: string, confirm: string): Promise<void>
-    OpenVault(password: string): Promise<void>
+    CreateVault(name: string, password: string, confirm: string): Promise<void>
+    OpenVault(file: string, password: string): Promise<void>
+    GetCurrentVaultName(): Promise<string>
+    DeleteVault(file: string): Promise<void>
+    DeleteAccount(): Promise<void>
     ChangeMasterPassword(oldPassword: string, newPassword: string, confirm: string): Promise<void>
     Lock(): Promise<void>
     GetItems(): Promise<Item[]>
     CreateItem(input: Item): Promise<Item>
     UpdateItem(input: Item): Promise<void>
     DeleteItem(id: string): Promise<void>
+    DeleteItems(ids: string[]): Promise<void>
+    SetCategoryBatch(ids: string[], category: string): Promise<void>
+    AddTagBatch(ids: string[], tag: string): Promise<void>
+    SetFavoriteBatch(ids: string[], favorite: boolean): Promise<void>
+    ExportSelectedCSV(ids: string[]): Promise<string>
+    ExportSelectedJSON(ids: string[]): Promise<string>
     GeneratePassword(opts: PasswordOptions): Promise<string>
     GeneratePassphrase(words: number): Promise<string>
     CopyToClipboard(text: string): Promise<void>
