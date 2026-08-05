@@ -69,11 +69,6 @@ export const api = {
     validateTOTPSecret: (secret: string): Promise<void> => window.go.main.App.ValidateTOTPSecret(secret),
     ingestTOTPURI: (uri: string): Promise<string> => window.go.main.App.IngestTOTPURI(uri),
     analyzeVault: (): Promise<import('./types').HealthReport> => window.go.main.App.AnalyzeVault(),
-    isHelloAvailable: (): Promise<boolean> => window.go.main.App.IsHelloAvailable(),
-    isHelloEnabled: (): Promise<boolean> => window.go.main.App.IsHelloEnabled(),
-    enableHello: (): Promise<void> => window.go.main.App.EnableHello(),
-    disableHello: (): Promise<void> => window.go.main.App.DisableHello(),
-    helloUnlock: (file: string): Promise<boolean> => window.go.main.App.HelloUnlock(file),
 }
 
 export async function errorMessage(e: unknown): Promise<string> {

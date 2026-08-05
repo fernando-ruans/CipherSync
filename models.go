@@ -52,10 +52,9 @@ type ImportResult struct {
 }
 
 type VaultInfo struct {
-	Name        string `json:"name"`
-	File        string `json:"file"`
-	LastOpened  int64  `json:"lastOpened"`
-	HelloEnabled bool  `json:"helloEnabled"`
+	Name       string `json:"name"`
+	File       string `json:"file"`
+	LastOpened int64  `json:"lastOpened"`
 }
 
 type TOTPSetupInfo struct {

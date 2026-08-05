@@ -42,14 +42,6 @@ export function DeleteVault(arg1) {
   return window['go']['main']['App']['DeleteVault'](arg1);
 }
 
-export function DisableHello() {
-  return window['go']['main']['App']['DisableHello']();
-}
-
-export function EnableHello() {
-  return window['go']['main']['App']['EnableHello']();
-}
-
 export function ExportCSV() {
   return window['go']['main']['App']['ExportCSV']();
 }
@@ -106,10 +98,6 @@ export function GetTOTPCodeForSecret(arg1) {
   return window['go']['main']['App']['GetTOTPCodeForSecret'](arg1);
 }
 
-export function HelloUnlock(arg1) {
-  return window['go']['main']['App']['HelloUnlock'](arg1);
-}
-
 export function ImportAutoCSV(arg1) {
   return window['go']['main']['App']['ImportAutoCSV'](arg1);
 }
@@ -132,14 +120,6 @@ export function ImportEncryptedTransfer(arg1, arg2) {
 
 export function IngestTOTPURI(arg1) {
   return window['go']['main']['App']['IngestTOTPURI'](arg1);
-}
-
-export function IsHelloAvailable() {
-  return window['go']['main']['App']['IsHelloAvailable']();
-}
-
-export function IsHelloEnabled() {
-  return window['go']['main']['App']['IsHelloEnabled']();
 }
 
 export function IsUnlocked() {

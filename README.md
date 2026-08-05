@@ -43,7 +43,6 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 - **TOTP / 2FA integrado** — autenticador de 6 dígitos com QR code por **câmera**, **upload de imagem** ou **chave manual**, com círculo de contagem regressiva.
 - **Watchtower** — painel de saúde das senhas: senhas fracas, duplicadas, antigas, sem 2FA e vazadas, com score geral de 0–100%.
 - **Detecção de vazamento (HIBP)** — verifica se suas senhas já vazaram usando **k-anonymity** (apenas os 5 primeiros caracteres do SHA-1 saem da sua máquina).
-- **Windows Hello** — desbloqueio biométrico via DPAPI (Windows).
 - **Gerador de senhas** — aleatórias (comprimento/tipos de caractere) e por frases (palavras).
 
 ### Experiência
@@ -76,7 +75,6 @@ Chave do cofre (vault key) ──► criptografa cada item individualmente
 - Chaves e buffers são **zerados em memória** ao bloquear o cofre.
 - Clipboard limpo automaticamente após **60 segundos**.
 - **HIBP** usa k-anonymity: apenas os 5 primeiros caracteres do hash SHA-1 da senha são enviados à API pública — nenhuma senha ou hash completo sai da máquina.
-- **Windows Hello** protege a chave do cofre com DPAPI (credenciais da sessão do Windows).
 - Banco de dados em SQLite **puro Go** (modernc.org/sqlite), sem dependência de CGO — facilita o cross-compile para Linux.
 
 ---
@@ -123,8 +121,7 @@ Os cofres ficam no diretório de configuração do usuário:
 ```
 CipherSync/
 ├── pessoal.passapp        # cofre criptografado (SQLite)
-├── trabalho.passapp       # múltiplos cofres suportados
-└── hello-pessoal.blob     # chave protegida por DPAPI (Windows Hello)
+└── trabalho.passapp       # múltiplos cofres suportados
 ```
 
 > ⚠️ Os arquivos `.passapp` são criptografados, mas **faça backups** do diretório acima. Sem a senha mestra, os dados são irrecuperáveis.
@@ -191,7 +188,6 @@ O executável é gerado em `build/bin/`.
 
 - Dependências nativas: `libgtk-3-dev`, `libwebkit2gtk-4.0-dev` (ou `-4.1`) e `build-essential`.
 - Clipboard/favicons usam ferramentas padrão do desktop (xclip/xsel ou wl-clipboard no Wayland).
-- Windows Hello não está disponível no Linux (opção oculta na interface).
 
 ### Ícone
 
@@ -213,9 +209,6 @@ Para regenerar os ícones a partir de `ciphersync-logo.png`:
 ├── vaults.go             # múltiplos cofres, slugify, listagem
 ├── totp.go               # TOTP/2FA
 ├── watchtower.go         # análise de saúde + HIBP
-├── hello.go              # Windows Hello (bindings)
-├── hello_windows.go      # DPAPI (build tag windows)
-├── hello_unsupported.go  # stub para não-Windows
 ├── import_export.go      # import/export + transferência criptografada
 ├── generator.go          # gerador de senhas/frases
 ├── wordlist.go           # wordlist para frases
@@ -239,7 +232,7 @@ Para regenerar os ícones a partir de `ciphersync-logo.png`:
 go test ./...
 ```
 
-Os testes cobrem: ciclo de vida do cofre, troca de senha mestra, migração de schema, batch operations, múltiplos cofres, import/export (CSV, Bitwarden, transferência), TOTP/QR, análise do Watchtower, abertura por chave e DPAPI round-trip.
+Os testes cobrem: ciclo de vida do cofre, troca de senha mestra, migração de schema, batch operations, múltiplos cofres, import/export (CSV, Bitwarden, transferência), TOTP/QR e análise do Watchtower.
 
 Arquivos de teste de import em `testdata/`:
 - `1password_export.csv` — 50 cadastros no formato do 1Password

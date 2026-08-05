@@ -22,10 +22,6 @@ export function DeleteItems(arg1:Array<string>):Promise<void>;
 
 export function DeleteVault(arg1:string):Promise<void>;
 
-export function DisableHello():Promise<void>;
-
-export function EnableHello():Promise<void>;
-
 export function ExportCSV():Promise<string>;
 
 export function ExportEncryptedJSON(arg1:string):Promise<string>;
@@ -54,8 +50,6 @@ export function GetTOTPCode(arg1:string):Promise<main.TOTPCode>;
 
 export function GetTOTPCodeForSecret(arg1:string):Promise<main.TOTPCode>;
 
-export function HelloUnlock(arg1:string):Promise<boolean>;
-
 export function ImportAutoCSV(arg1:string):Promise<main.ImportResult>;
 
 export function ImportBitwardenJSON(arg1:string):Promise<main.ImportResult>;
@@ -67,10 +61,6 @@ export function ImportCommit(arg1:Array<main.Item>):Promise<main.ImportResult>;
 export function ImportEncryptedTransfer(arg1:string,arg2:string):Promise<main.ImportResult>;
 
 export function IngestTOTPURI(arg1:string):Promise<string>;
-
-export function IsHelloAvailable():Promise<boolean>;
-
-export function IsHelloEnabled():Promise<boolean>;
 
 export function IsUnlocked():Promise<boolean>;
 

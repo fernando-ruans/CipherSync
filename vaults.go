@@ -62,10 +62,9 @@ func listVaultsIn(dir string) ([]VaultInfo, error) {
 		}
 		info, _ := e.Info()
 		v := VaultInfo{
-			File:        e.Name(),
-			Name:        strings.TrimSuffix(e.Name(), ".passapp"),
-			LastOpened:  info.ModTime().UnixMilli(),
-			HelloEnabled: fileExists(filepath.Join(dir, helloBlobName(e.Name()))),
+			File:       e.Name(),
+			Name:       strings.TrimSuffix(e.Name(), ".passapp"),
+			LastOpened: info.ModTime().UnixMilli(),
 		}
 		if name, err := readVaultName(filepath.Join(dir, e.Name())); err == nil && name != "" {
 			v.Name = name

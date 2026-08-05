@@ -2,7 +2,6 @@ import {useState} from 'react'
 import toast from 'react-hot-toast'
 import {
     ChevronLeft,
-    Fingerprint,
     KeyRound,
     Loader2,
     Plus,
@@ -134,13 +133,11 @@ function VaultCard({vault, selected, onSelect, onDelete}: {
 export function UnlockScreen() {
     const vaults = useApp((s) => s.vaults)
     const unlock = useApp((s) => s.unlock)
-    const unlockWithHello = useApp((s) => s.unlockWithHello)
     const newVault = useApp((s) => s.newVault)
     const deleteVault = useApp((s) => s.deleteVault)
     const [selectedFile, setSelectedFile] = useState<string | null>(null)
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
-    const [helloLoading, setHelloLoading] = useState(false)
 
     const selected = vaults.find((v) => v.file === selectedFile) ?? null
 
@@ -154,19 +151,6 @@ export function UnlockScreen() {
             setPassword('')
         } finally {
             setLoading(false)
-        }
-    }
-
-    async function doHello() {
-        if (!selected) return
-        setHelloLoading(true)
-        try {
-            const ok = await unlockWithHello(selected.file)
-            if (!ok) toast.error('Windows Hello não está configurado para este cofre')
-        } catch (err) {
-            toast.error(await errorMessage(err))
-        } finally {
-            setHelloLoading(false)
         }
     }
 
@@ -220,13 +204,6 @@ export function UnlockScreen() {
                         <KeyRound size={18} className="text-accent"/> {selected.name}
                     </h2>
                     <p className="mb-5 text-sm text-mut">Digite sua senha mestra para desbloquear.</p>
-
-                    {selected.helloEnabled && (
-                        <Button variant="subtle" className="mb-3 w-full" onClick={() => void doHello()} disabled={helloLoading}>
-                            {helloLoading ? <Loader2 size={16} className="animate-spin"/> : <Fingerprint size={16}/>}
-                            Desbloquear com Windows Hello
-                        </Button>
-                    )}
 
                     <form onSubmit={(e) => {
                         e.preventDefault()

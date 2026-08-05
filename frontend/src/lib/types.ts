@@ -53,7 +53,6 @@ export interface VaultInfo {
     name: string
     file: string
     lastOpened: number
-    helloEnabled: boolean
 }
 
 export interface TOTPSetupInfo {
@@ -141,9 +140,4 @@ export interface AppApi {
     ValidateTOTPSecret(secret: string): Promise<void>
     IngestTOTPURI(uri: string): Promise<string>
     AnalyzeVault(): Promise<HealthReport>
-    IsHelloAvailable(): Promise<boolean>
-    IsHelloEnabled(): Promise<boolean>
-    EnableHello(): Promise<void>
-    DisableHello(): Promise<void>
-    HelloUnlock(file: string): Promise<boolean>
 }

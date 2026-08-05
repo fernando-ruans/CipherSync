@@ -265,35 +265,6 @@ func normalizeItem(item *Item) {
 	}
 }
 
-// openVaultWithKey opens a vault using a previously-obtained vault key
-// (e.g. recovered via Windows Hello) instead of the master password.
-func openVaultWithKey(path string, vaultKey []byte) (*Vault, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, ErrNotAVault
-	}
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	if err := ensureTables(db); err != nil {
-		db.Close()
-		return nil, ErrNotAVault
-	}
-	v := &Vault{
-		path:     path,
-		db:       db,
-		vaultKey: vaultKey,
-		items:    []Item{},
-		itemsBy:  map[string]*Item{},
-	}
-	if err := v.loadItems(); err != nil {
-		v.close()
-		return nil, ErrWrongPassword
-	}
-	return v, nil
-}
-
 func (v *Vault) close() {
 	if v.vaultKey != nil {
 		wipe(v.vaultKey)

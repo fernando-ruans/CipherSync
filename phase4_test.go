@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -90,8 +89,8 @@ func TestAnalyzeVault(t *testing.T) {
 	// weak password
 	_, _ = v.create(Item{Type: TypeLogin, Title: "Weak", Password: "123456", URL: "https://a.com"})
 	// duplicate passwords (two items share it)
-	a, _ := v.create(Item{Type: TypeLogin, Title: "DupA", Password: "SharedPass1!", URL: "https://b.com"})
-	b, _ := v.create(Item{Type: TypeLogin, Title: "DupB", Password: "SharedPass1!", URL: "https://c.com"})
+	_, _ = v.create(Item{Type: TypeLogin, Title: "DupA", Password: "SharedPass1!", URL: "https://b.com"})
+	_, _ = v.create(Item{Type: TypeLogin, Title: "DupB", Password: "SharedPass1!", URL: "https://c.com"})
 	// old password (updated long ago)
 	old, _ := v.create(Item{Type: TypeLogin, Title: "Old", Password: "OldPass123!", URL: "https://d.com"})
 	old.UpdatedAt = time.Now().Add(-2 * 365 * 24 * time.Hour).UnixMilli()
@@ -128,8 +127,6 @@ func TestAnalyzeVault(t *testing.T) {
 	if report.TotalScore >= 100 {
 		t.Fatal("score should be penalized")
 	}
-	_ = a
-	_ = b
 }
 
 func TestBreachCacheAndLookup(t *testing.T) {
@@ -142,55 +139,5 @@ func TestBreachCacheAndLookup(t *testing.T) {
 	}
 	if !breached || count == 0 {
 		t.Fatalf("expected 'password' to be breached, got %v %d", breached, count)
-	}
-}
-
-func TestOpenVaultWithKey(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "v.passapp")
-	v, err := createVault(path, "pw")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = v.create(Item{Title: "A", Password: "x"})
-	key := append([]byte{}, v.vaultKey...)
-	v.close()
-
-	v2, err := openVaultWithKey(path, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer v2.close()
-	if len(v2.list()) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(v2.list()))
-	}
-
-	bad := append([]byte{}, key...)
-	for i := range bad {
-		bad[i] ^= 0xff
-	}
-	if _, err := openVaultWithKey(path, bad); err != ErrWrongPassword {
-		t.Fatalf("expected ErrWrongPassword with wrong key, got %v", err)
-	}
-}
-
-func TestHelloHelpers(t *testing.T) {
-	if helloBlobName("pessoal.passapp") != "hello-pessoal.blob" {
-		t.Fatalf("bad blob name: %s", helloBlobName("pessoal.passapp"))
-	}
-	if !helloAvailable() {
-		t.Skip("Windows Hello (DPAPI) not available on this platform")
-	}
-	secret := []byte("vault-key-bytes-1234567890")
-	blob, err := protectForHello(secret, "test-vault")
-	if err != nil {
-		t.Fatal(err)
-	}
-	out, err := unprotectWithHello(blob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(out) != string(secret) {
-		t.Fatalf("round trip failed: %q", out)
 	}
 }

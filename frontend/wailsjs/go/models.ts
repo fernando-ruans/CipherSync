@@ -250,7 +250,6 @@ export namespace main {
 	    name: string;
 	    file: string;
 	    lastOpened: number;
-	    helloEnabled: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new VaultInfo(source);
@@ -261,7 +260,6 @@ export namespace main {
 	        this.name = source["name"];
 	        this.file = source["file"];
 	        this.lastOpened = source["lastOpened"];
-	        this.helloEnabled = source["helloEnabled"];
 	    }
 	}
 	export class VersionEntry {

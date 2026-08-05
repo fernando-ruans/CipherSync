@@ -6,7 +6,6 @@ interface AppState {
     phase: Phase
     vaults: VaultInfo[]
     vaultName: string
-    vaultFile: string
     items: Item[]
     selectedId: string | null
     multiSelected: string[]
@@ -22,7 +21,6 @@ interface AppState {
     newVault: () => void
     setup: (name: string, password: string, confirm: string) => Promise<void>
     unlock: (file: string, password: string) => Promise<void>
-    unlockWithHello: (file: string) => Promise<boolean>
     lock: () => Promise<void>
     deleteVault: (file: string) => Promise<void>
     deleteAccount: () => Promise<void>
@@ -54,7 +52,6 @@ export const useApp = create<AppState>((set, get) => ({
     phase: 'loading',
     vaults: [],
     vaultName: '',
-    vaultFile: '',
     items: [],
     selectedId: null,
     multiSelected: [],
@@ -91,16 +88,7 @@ export const useApp = create<AppState>((set, get) => ({
         await api.openVault(file, password)
         const items = await api.getItems()
         const vaultName = await api.getCurrentVaultName()
-        set({phase: 'main', items, vaultName, vaultFile: file, selectedId: null})
-    },
-
-    unlockWithHello: async (file) => {
-        const ok = await api.helloUnlock(file)
-        if (!ok) return false
-        const items = await api.getItems()
-        const vaultName = await api.getCurrentVaultName()
-        set({phase: 'main', items, vaultName, vaultFile: file, selectedId: null})
-        return true
+        set({phase: 'main', items, vaultName, selectedId: null})
     },
 
     lock: async () => {
@@ -110,7 +98,6 @@ export const useApp = create<AppState>((set, get) => ({
             set({
                 phase: 'unlock',
                 vaultName: '',
-                vaultFile: '',
                 items: [],
                 selectedId: null,
                 multiSelected: [],
@@ -136,7 +123,6 @@ export const useApp = create<AppState>((set, get) => ({
             phase: 'setup',
             vaults: [],
             vaultName: '',
-            vaultFile: '',
             items: [],
             selectedId: null,
             multiSelected: [],
