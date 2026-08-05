@@ -250,6 +250,104 @@ func TestOnePasswordCSVFixture(t *testing.T) {
 	}
 }
 
+func TestChromeCSVFixture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "chrome_passwords.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := parseAutoCSV(string(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) < 20 {
+		t.Fatalf("expected dozens of entries, got %d", len(items))
+	}
+	for _, it := range items {
+		if it.Title == "" || it.Username == "" || it.Password == "" || it.URL == "" {
+			t.Fatalf("chrome item missing required field: %+v", it)
+		}
+	}
+	if items[0].Title != "GitHub" || items[0].Username != "ana.dev@gmail.com" || items[0].URL != "https://github.com" {
+		t.Fatalf("first chrome item wrong: %+v", items[0])
+	}
+}
+
+func TestFirefoxCSVTitleFallback(t *testing.T) {
+	data := "url,username,password\n" +
+		"https://github.com/login,ffuser,ffpass\n" +
+		"https://mail.google.com,ff.mail,ffpw2\n"
+	items, err := parseAutoCSV(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if items[0].Title != "github.com" || items[0].URL != "https://github.com/login" {
+		t.Fatalf("title fallback failed: %+v", items[0])
+	}
+}
+
+func TestBitwardenJSONFixture(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "bitwarden_export.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := parseBitwardenJSON(string(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 20 {
+		t.Fatalf("expected 20 items, got %d", len(items))
+	}
+
+	counts := map[string]int{}
+	for _, it := range items {
+		counts[it.Type]++
+	}
+	if counts[TypeLogin] != 6 {
+		t.Fatalf("expected 6 logins, got %d", counts[TypeLogin])
+	}
+	if counts[TypeNote] != 5 {
+		t.Fatalf("expected 5 notes, got %d", counts[TypeNote])
+	}
+	if counts[TypeCreditCard] != 5 {
+		t.Fatalf("expected 5 credit cards, got %d", counts[TypeCreditCard])
+	}
+	if counts[TypeIdentity] != 4 {
+		t.Fatalf("expected 4 identities, got %d", counts[TypeIdentity])
+	}
+
+	var card *Item
+	var identity *Item
+	var note *Item
+	for i := range items {
+		switch items[i].Type {
+		case TypeCreditCard:
+			if card == nil {
+				card = &items[i]
+			}
+		case TypeIdentity:
+			if identity == nil {
+				identity = &items[i]
+			}
+		case TypeNote:
+			if note == nil {
+				note = &items[i]
+			}
+		}
+	}
+	if card.Fields["number"] != "4111111111111111" || card.Fields["cardholder"] != "ANA C FERREIRA" || card.Fields["expiry"] != "12/28" {
+		t.Fatalf("card fields wrong: %+v", card.Fields)
+	}
+	if identity.Fields["fullName"] != "Ana Costa Ferreira" {
+		t.Fatalf("identity fullName wrong: %q", identity.Fields["fullName"])
+	}
+	if note.Title == "" || note.Notes == "" {
+		t.Fatalf("note item incomplete: %+v", note)
+	}
+}
+
 func TestMigrateOldSchemaVault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "v.passapp")

@@ -92,8 +92,8 @@ export function ImportModal({onClose}: {onClose: () => void}) {
         }
     }
     const formatOptions: {value: Format; label: string; hint: string}[] = [
-        {value: 'auto', label: 'CSV (LastPass / 1Password)', hint: 'Detecção automática de colunas'},
-        {value: 'bitwarden', label: 'Bitwarden JSON', hint: 'Exportação .json não criptografada'},
+        {value: 'auto', label: 'CSV (Chrome / Firefox / LastPass / 1Password)', hint: 'Detecção automática de colunas'},
+        {value: 'bitwarden', label: 'Bitwarden JSON', hint: 'Exportação .json não criptografada (todos os tipos de item)'},
         {value: 'csv', label: 'CSV genérico', hint: 'Escolha manualmente o que cada coluna representa'},
         {value: 'transfer', label: 'Transferência LockSync', hint: 'Arquivo .passapp criptografado'},
     ]

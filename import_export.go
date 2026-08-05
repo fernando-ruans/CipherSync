@@ -100,6 +100,11 @@ func parseAutoCSV(data string) ([]Item, error) {
 		it.URL = get(urlCol)
 		it.Notes = get(notesCol)
 		it.Category = get(catCol)
+		if it.Title == "" && it.URL != "" {
+			if d := extractDomain(it.URL); d != "" {
+				it.Title = d
+			}
+		}
 		return it
 	}), nil
 }

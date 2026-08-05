@@ -40,7 +40,7 @@ Gerenciador de senhas open-source para Windows e Linux, inspirado no 1Password.
 - [x] **Sistema de tags** — input com autocomplete, chips, filtro na sidebar
 - [x] **Favicons** — fetch automático com cache local (evento em tempo real)
 - [x] **Histórico de versões** — snapshot a cada alteração (até 50/item), diff visual e restore
-- [x] **Import** — CSV genérico com mapeamento de colunas, CSV auto-detectado (LastPass/1Password), Bitwarden JSON, transferência LockSync criptografada
+- [x] **Import** — CSV genérico com mapeamento de colunas, CSV auto-detectado (Chrome, Edge, Firefox, LastPass, 1Password), Bitwarden JSON (todos os tipos de item), transferência LockSync criptografada
 - [x] **Export** — CSV, JSON (com aviso de segurança) e transferência criptografada `.passapp`
 - [x] **Temas** — Dark / Light / Sistema, com persistência
 - [x] **Auto-lock** — 1/5/15/30/60 min ou nunca; bloqueia ao minimizar
@@ -79,6 +79,8 @@ go test ./...
 ```
 
 - `testdata/1password_export.csv` — exportação de exemplo no formato padrão do 1Password (50 cadastros) para testar o import.
+- `testdata/chrome_passwords.csv` — exportação de exemplo no formato do Chrome/Edge (26 cadastros) para testar o import de navegador.
+- `testdata/bitwarden_export.json` — exportação Bitwarden multi-tipo (6 logins, 5 notas, 5 cartões, 4 identidades) com categorias.
 
 ## Licença
 

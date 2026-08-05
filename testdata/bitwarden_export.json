@@ -1,0 +1,267 @@
+{
+  "encrypted": false,
+  "folders": [
+    { "id": "f-personal", "name": "Pessoal" },
+    { "id": "f-work", "name": "Trabalho" },
+    { "id": "f-finance", "name": "Finanças" }
+  ],
+  "items": [
+    {
+      "id": "it-001",
+      "folderId": "f-personal",
+      "name": "GitHub",
+      "favorite": true,
+      "notes": "Conta de desenvolvimento com 2FA",
+      "type": 0,
+      "login": {
+        "username": "ana.dev@gmail.com",
+        "password": "K7#mPq2!vXz9",
+        "uris": [{ "uri": "https://github.com" }]
+      }
+    },
+    {
+      "id": "it-002",
+      "folderId": "f-personal",
+      "name": "Netflix",
+      "notes": "Plano família - 4 telas",
+      "type": 0,
+      "login": {
+        "username": "ana.costa@gmail.com",
+        "password": "N3t!F1x#2026aB",
+        "uris": [{ "uri": "https://www.netflix.com" }]
+      }
+    },
+    {
+      "id": "it-003",
+      "folderId": "f-work",
+      "name": "AWS Console",
+      "favorite": true,
+      "notes": "Conta root - MFA obrigatório",
+      "type": 0,
+      "login": {
+        "username": "ana.aws@gmail.com",
+        "password": "Aw#s22$Qp7!fR3",
+        "uris": [{ "uri": "https://console.aws.amazon.com" }]
+      }
+    },
+    {
+      "id": "it-004",
+      "folderId": "f-work",
+      "name": "Slack",
+      "type": 0,
+      "login": {
+        "username": "ana.slack@gmail.com",
+        "password": "Sl#ck8$wH2@jV9",
+        "uris": [{ "uri": "https://app.slack.com" }]
+      }
+    },
+    {
+      "id": "it-005",
+      "folderId": "f-personal",
+      "name": "iFood",
+      "type": 0,
+      "login": {
+        "username": "ana.fome@gmail.com",
+        "password": "Fd#2026&bN5$pK1",
+        "uris": [{ "uri": "https://www.ifood.com.br" }]
+      }
+    },
+    {
+      "id": "it-006",
+      "folderId": "f-finance",
+      "name": "Nubank",
+      "favorite": true,
+      "notes": "Banco digital - cuidado com golpes",
+      "type": 0,
+      "login": {
+        "username": "ana.fin@gmail.com",
+        "password": "Nb#k21$Fg9@zZ5",
+        "uris": [{ "uri": "https://app.nubank.com.br" }]
+      }
+    },
+    {
+      "id": "it-007",
+      "folderId": "f-personal",
+      "name": "Notas da reunião",
+      "notes": "Lembrete: apresentar o relatório na sexta-feira às 10h.\nPróxima sprint começa na segunda.",
+      "type": 1,
+      "secureNote": { "type": 0 }
+    },
+    {
+      "id": "it-008",
+      "folderId": "f-personal",
+      "name": "Perguntas de segurança",
+      "notes": "Primeira escola: Escola Estadual Paulista.\nNome do primeiro animal: Tobby.\nCidade natal: Campinas - SP.",
+      "type": 1,
+      "secureNote": { "type": 0 }
+    },
+    {
+      "id": "it-009",
+      "folderId": "f-work",
+      "name": "Credenciais do servidor",
+      "notes": "Servidor de staging.\nSSH na porta 2222.\nUsuário administrador: deploy.",
+      "type": 1,
+      "secureNote": { "type": 0 }
+    },
+    {
+      "id": "it-010",
+      "folderId": "f-finance",
+      "name": "Chave PIX",
+      "notes": "Chave aleatória cadastrada no banco.\nUsar apenas para recebimentos pessoais.",
+      "type": 1,
+      "secureNote": { "type": 0 }
+    },
+    {
+      "id": "it-011",
+      "folderId": "f-personal",
+      "name": "Código do armário",
+      "notes": "Armário 24 - academia.",
+      "type": 1,
+      "secureNote": { "type": 0 }
+    },
+    {
+      "id": "it-012",
+      "folderId": "f-finance",
+      "name": "Visa Black",
+      "favorite": true,
+      "type": 2,
+      "card": {
+        "cardholderName": "ANA C FERREIRA",
+        "brand": "Visa",
+        "number": "4111111111111111",
+        "expMonth": "12",
+        "expYear": "2028",
+        "code": "123"
+      }
+    },
+    {
+      "id": "it-013",
+      "folderId": "f-finance",
+      "name": "Mastercard Gold",
+      "type": 2,
+      "card": {
+        "cardholderName": "ANA C FERREIRA",
+        "brand": "Mastercard",
+        "number": "5555555555554444",
+        "expMonth": "07",
+        "expYear": "2027",
+        "code": "456"
+      }
+    },
+    {
+      "id": "it-014",
+      "folderId": "f-finance",
+      "name": "Nubank Cartão",
+      "type": 2,
+      "card": {
+        "cardholderName": "ANA C FERREIRA",
+        "brand": "Mastercard",
+        "number": "5200828282828210",
+        "expMonth": "03",
+        "expYear": "2029",
+        "code": "789"
+      }
+    },
+    {
+      "id": "it-015",
+      "folderId": "f-finance",
+      "name": "Cartão Corporativo",
+      "notes": "Limite de R$ 5.000 mensais",
+      "type": 2,
+      "card": {
+        "cardholderName": "ANA FERREIRA",
+        "brand": "Visa",
+        "number": "4012888888881881",
+        "expMonth": "09",
+        "expYear": "2026",
+        "code": "321"
+      }
+    },
+    {
+      "id": "it-016",
+      "folderId": "f-personal",
+      "name": "Casa própria",
+      "type": 2,
+      "card": {
+        "cardholderName": "ANA COSTA FERREIRA",
+        "brand": "Elo",
+        "number": "6362970000457013",
+        "expMonth": "01",
+        "expYear": "2030",
+        "code": "654"
+      }
+    },
+    {
+      "id": "it-017",
+      "folderId": "f-personal",
+      "name": "Ana Ferreira",
+      "favorite": true,
+      "type": 3,
+      "identity": {
+        "firstName": "Ana",
+        "middleName": "Costa",
+        "lastName": "Ferreira",
+        "address1": "Rua das Flores, 123",
+        "address2": "Apto 45",
+        "city": "Campinas",
+        "state": "SP",
+        "postalCode": "13000-000",
+        "country": "BR",
+        "phone": "+55 19 99999-0000",
+        "email": "ana.costa@gmail.com"
+      }
+    },
+    {
+      "id": "it-018",
+      "folderId": "f-work",
+      "name": "Perfil profissional",
+      "type": 3,
+      "identity": {
+        "title": "Dr.",
+        "firstName": "Ana",
+        "lastName": "Ferreira",
+        "address1": "Av. Paulista, 1000",
+        "city": "São Paulo",
+        "state": "SP",
+        "postalCode": "01310-100",
+        "country": "BR",
+        "phone": "+55 11 99999-1111",
+        "email": "ana.carreira@gmail.com"
+      }
+    },
+    {
+      "id": "it-019",
+      "folderId": "f-personal",
+      "name": "Dados de emergência",
+      "type": 3,
+      "identity": {
+        "firstName": "João",
+        "lastName": "Silva",
+        "address1": "Rua do Contorno, 999",
+        "city": "Belo Horizonte",
+        "state": "MG",
+        "postalCode": "30110-000",
+        "country": "BR",
+        "phone": "+55 31 99999-2222",
+        "email": "joao.silva@gmail.com"
+      }
+    },
+    {
+      "id": "it-020",
+      "folderId": "f-finance",
+      "name": "Dados bancários",
+      "type": 3,
+      "identity": {
+        "firstName": "Ana",
+        "lastName": "Ferreira",
+        "address1": "Rua das Flores, 123",
+        "city": "Campinas",
+        "state": "SP",
+        "postalCode": "13000-000",
+        "country": "BR",
+        "phone": "+55 19 99999-0000",
+        "email": "ana.fin@gmail.com"
+      }
+    }
+  ]
+}
