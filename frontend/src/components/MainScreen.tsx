@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react'
 import toast from 'react-hot-toast'
 import {
+    AlertTriangle,
     Check,
     Dices,
     Download,
@@ -13,6 +14,7 @@ import {
     Plus,
     Search,
     Settings,
+    Shield,
     Star,
     Tag as TagIcon,
     Trash2,
@@ -27,6 +29,7 @@ import {GeneratorModal} from './GeneratorModal'
 import {SettingsModal} from './SettingsModal'
 import {ImportModal} from './ImportModal'
 import {ExportModal} from './ExportModal'
+import {WatchtowerModal} from './WatchtowerModal'
 import {extractDomain, downloadFile} from '../lib/util'
 import type {Item} from '../lib/types'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
@@ -44,10 +47,11 @@ function Favicon({url, domain}: {url: string; domain: string}) {
     return <img src={data} alt="" className="h-6 w-6 shrink-0 rounded-full bg-transparent object-contain"/>
 }
 
-function Sidebar({onOpenSettings, onOpenImport, onOpenExport}: {
+function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}: {
     onOpenSettings: () => void
     onOpenImport: () => void
     onOpenExport: () => void
+    onOpenWatchtower: () => void
 }) {
     const items = useApp((s) => s.items)
     const category = useApp((s) => s.category)
@@ -95,6 +99,14 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport}: {
             count: items.filter((i) => i.favorite).length,
             onClick: () => toggleFavoritesOnly(),
         },
+        {
+            key: 'watchtower',
+            label: 'Watchtower',
+            icon: <Shield size={16}/>,
+            active: false,
+            count: null,
+            onClick: onOpenWatchtower,
+        },
     ]
 
     return (
@@ -105,7 +117,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport}: {
                         <Lock size={16} className="text-white"/>
                     </div>
                     <div className="min-w-0">
-                        <div className="text-sm font-bold text-ink">LockSync</div>
+                        <div className="text-sm font-bold text-ink">CipherSync</div>
                         <div className="truncate text-[11px] text-faint" title={vaultName || 'Cofre'}>
                             {vaultName || 'Cofre'}
                         </div>
@@ -464,6 +476,7 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
     onRowClick: () => void
 }) {
     const domain = item.type === 'login' && item.url ? extractDomain(item.url) : ''
+    const breached = useApp((s) => s.breachedIds.includes(item.id))
     return (
         <div
             onClick={onRowClick}
@@ -489,7 +502,14 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
                     <span className={`truncate text-sm font-medium ${selected ? 'text-accent' : 'text-soft'}`}>
                         {item.title || 'Sem título'}
                     </span>
-                    {item.favorite && <Star size={13} className="shrink-0 fill-amber-400 text-amber-400"/>}
+                    <span className="flex shrink-0 items-center gap-1">
+                        {breached && (
+                            <span title="Senha vazada" className="text-red-400">
+                                <AlertTriangle size={13}/>
+                            </span>
+                        )}
+                        {item.favorite && <Star size={13} className="fill-amber-400 text-amber-400"/>}
+                    </span>
                 </div>
                 <div className="mt-0.5 truncate text-xs text-faint">
                     {item.username || item.category || '—'}
@@ -528,9 +548,11 @@ export function MainScreen() {
     const createItem = useApp((s) => s.createItem)
     const loadSettings = useApp((s) => s.loadSettings)
     const setFavicon = useApp((s) => s.setFavicon)
+    const selectItem = useApp((s) => s.selectItem)
     const [showSettings, setShowSettings] = useState(false)
     const [showImport, setShowImport] = useState(false)
     const [showExport, setShowExport] = useState(false)
+    const [showWatchtower, setShowWatchtower] = useState(false)
 
     useEffect(() => {
         void loadSettings()
@@ -584,6 +606,7 @@ export function MainScreen() {
                     onOpenSettings={() => setShowSettings(true)}
                     onOpenImport={() => setShowImport(true)}
                     onOpenExport={() => setShowExport(true)}
+                    onOpenWatchtower={() => setShowWatchtower(true)}
                 />
                 <ItemList/>
                 <main className="min-w-0 flex-1">
@@ -593,6 +616,12 @@ export function MainScreen() {
             {showSettings && <SettingsModal onClose={() => setShowSettings(false)}/>}
             {showImport && <ImportModal onClose={() => setShowImport(false)}/>}
             {showExport && <ExportModal onClose={() => setShowExport(false)}/>}
+            {showWatchtower && (
+                <WatchtowerModal
+                    onClose={() => setShowWatchtower(false)}
+                    onSelectItem={(id) => selectItem(id)}
+                />
+            )}
         </div>
     )
 }

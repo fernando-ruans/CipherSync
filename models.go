@@ -18,6 +18,7 @@ type Item struct {
 	Category  string            `json:"category"`
 	Tags      []string          `json:"tags"`
 	Fields    map[string]string `json:"fields"`
+	TotpSecret string           `json:"totpSecret"`
 	Favorite  bool              `json:"favorite"`
 	CreatedAt int64             `json:"createdAt"`
 	UpdatedAt int64             `json:"updatedAt"`
@@ -51,7 +52,19 @@ type ImportResult struct {
 }
 
 type VaultInfo struct {
-	Name       string `json:"name"`
-	File       string `json:"file"`
-	LastOpened int64  `json:"lastOpened"`
+	Name        string `json:"name"`
+	File        string `json:"file"`
+	LastOpened  int64  `json:"lastOpened"`
+	HelloEnabled bool  `json:"helloEnabled"`
+}
+
+type TOTPSetupInfo struct {
+	Secret     string `json:"secret"`
+	QR         string `json:"qr"`
+	OtpauthURL string `json:"otpauthURL"`
+}
+
+type TOTPCode struct {
+	Code             string `json:"code"`
+	SecondsRemaining int    `json:"secondsRemaining"`
 }

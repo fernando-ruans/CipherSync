@@ -1,6 +1,16 @@
 import {useState} from 'react'
 import toast from 'react-hot-toast'
-import {ChevronLeft, KeyRound, Loader2, Lock, Plus, ShieldCheck, Trash2, Vault} from 'lucide-react'
+import {
+    ChevronLeft,
+    Fingerprint,
+    KeyRound,
+    Loader2,
+    Lock,
+    Plus,
+    ShieldCheck,
+    Trash2,
+    Vault,
+} from 'lucide-react'
 import {useApp} from '../state'
 import {api, errorMessage} from '../lib/api'
 import {Button, Input, RevealInput, StrengthMeter} from './ui'
@@ -14,7 +24,7 @@ function Shell({children}: {children: React.ReactNode}) {
                     <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/30">
                         <Lock size={32} className="text-white"/>
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-ink">LockSync</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-ink">CipherSync</h1>
                     <p className="mt-1 text-sm text-mut">Seu cofre de senhas, criptografado.</p>
                 </div>
                 <div className="rounded-2xl border border-edge bg-surface p-6 shadow-2xl">{children}</div>
@@ -123,11 +133,13 @@ function VaultCard({vault, selected, onSelect, onDelete}: {
 export function UnlockScreen() {
     const vaults = useApp((s) => s.vaults)
     const unlock = useApp((s) => s.unlock)
+    const unlockWithHello = useApp((s) => s.unlockWithHello)
     const newVault = useApp((s) => s.newVault)
     const deleteVault = useApp((s) => s.deleteVault)
     const [selectedFile, setSelectedFile] = useState<string | null>(null)
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
+    const [helloLoading, setHelloLoading] = useState(false)
 
     const selected = vaults.find((v) => v.file === selectedFile) ?? null
 
@@ -141,6 +153,19 @@ export function UnlockScreen() {
             setPassword('')
         } finally {
             setLoading(false)
+        }
+    }
+
+    async function doHello() {
+        if (!selected) return
+        setHelloLoading(true)
+        try {
+            const ok = await unlockWithHello(selected.file)
+            if (!ok) toast.error('Windows Hello não está configurado para este cofre')
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        } finally {
+            setHelloLoading(false)
         }
     }
 
@@ -194,6 +219,14 @@ export function UnlockScreen() {
                         <KeyRound size={18} className="text-accent"/> {selected.name}
                     </h2>
                     <p className="mb-5 text-sm text-mut">Digite sua senha mestra para desbloquear.</p>
+
+                    {selected.helloEnabled && (
+                        <Button variant="subtle" className="mb-3 w-full" onClick={() => void doHello()} disabled={helloLoading}>
+                            {helloLoading ? <Loader2 size={16} className="animate-spin"/> : <Fingerprint size={16}/>}
+                            Desbloquear com Windows Hello
+                        </Button>
+                    )}
+
                     <form onSubmit={(e) => {
                         e.preventDefault()
                         void submit()

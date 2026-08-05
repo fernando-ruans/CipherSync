@@ -1,12 +1,14 @@
 import {useEffect, useState} from 'react'
 import toast from 'react-hot-toast'
 import {
+    AlertTriangle,
     Copy,
     Dices,
     Globe,
     History,
     Lock,
     Save,
+    ShieldCheck,
     Star,
     Trash2,
     User,
@@ -17,6 +19,8 @@ import {Button, IconButton, Input, RevealInput} from './ui'
 import {GeneratorModal} from './GeneratorModal'
 import {VersionHistoryModal} from './VersionHistory'
 import {TagInput} from './TagInput'
+import {TOTPSetupModal} from './TOTPSetupModal'
+import {TOTPDisplay} from './TOTPDisplay'
 import {TYPE_FIELDS, ITEM_TYPES} from '../lib/fields'
 import {extractDomain} from '../lib/util'
 import type {Item, ItemType} from '../lib/types'
@@ -82,6 +86,7 @@ export function ItemDetail() {
     const [showGenerator, setShowGenerator] = useState<'password' | 'field' | null>(null)
     const [generatorField, setGeneratorField] = useState('')
     const [showHistory, setShowHistory] = useState(false)
+    const [showTOTPSetup, setShowTOTPSetup] = useState(false)
 
     useEffect(() => {
         setDraft(item ? {...item} : null)
@@ -150,8 +155,24 @@ export function ItemDetail() {
         setShowGenerator(null)
     }
 
+    async function saveTOTP(secret: string) {
+        if (!draft) return
+        await updateItem({...draft, totpSecret: secret})
+        setDraft({...draft, totpSecret: secret})
+        setShowTOTPSetup(false)
+        toast.success('2FA configurado')
+    }
+
+    async function removeTOTP() {
+        if (!draft) return
+        if (!confirm('Remover o 2FA deste item?')) return
+        await updateItem({...draft, totpSecret: ''})
+        setDraft({...draft, totpSecret: ''})
+    }
+
     const domain = draft.url ? extractDomain(draft.url) : ''
     const tagSuggestions = [...new Set(items.flatMap((i) => i.tags ?? []))]
+    const breached = useApp((s) => s.breachedIds.includes(item.id))
 
     return (
         <div className="flex h-full flex-col overflow-y-auto p-6">
@@ -186,6 +207,11 @@ export function ItemDetail() {
                             <Globe size={14}/> {domain}
                         </a>
                     )}
+                    {breached && (
+                        <div className="mt-2 flex w-fit items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400">
+                            <AlertTriangle size={13}/> Senha encontrada em vazamentos — altere-a
+                        </div>
+                    )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                     <IconButton
@@ -214,6 +240,22 @@ export function ItemDetail() {
                                 <Input label="Site (URL)" value={draft.url} onChange={(v) => set({url: v})} placeholder="https://exemplo.com"/>
                             </div>
                         </div>
+
+                        {item.totpSecret ? (
+                            <div>
+                                <TOTPDisplay itemId={item.id}/>
+                                <button
+                                    onClick={() => void removeTOTP()}
+                                    className="mt-2 text-xs text-faint transition-colors hover:text-red-400"
+                                >
+                                    Remover 2FA
+                                </button>
+                            </div>
+                        ) : (
+                            <Button variant="subtle" onClick={() => setShowTOTPSetup(true)}>
+                                <ShieldCheck size={16}/> Adicionar 2FA
+                            </Button>
+                        )}
                     </>
                 )}
 
@@ -279,6 +321,7 @@ export function ItemDetail() {
 
             {showGenerator && <GeneratorModal onClose={() => setShowGenerator(null)} onUse={useGenerated}/>}
             {showHistory && <VersionHistoryModal itemId={item.id} onClose={() => setShowHistory(false)}/>}
+            {showTOTPSetup && <TOTPSetupModal onClose={() => setShowTOTPSetup(false)} onSave={saveTOTP}/>}
         </div>
     )
 }

@@ -11,6 +11,7 @@ export interface Item {
     category: string
     tags: string[]
     fields: Record<string, string>
+    totpSecret: string
     favorite: boolean
     createdAt: number
     updatedAt: number
@@ -52,6 +53,46 @@ export interface VaultInfo {
     name: string
     file: string
     lastOpened: number
+    helloEnabled: boolean
+}
+
+export interface TOTPSetupInfo {
+    secret: string
+    qr: string
+    otpauthURL: string
+}
+
+export interface TOTPCode {
+    code: string
+    secondsRemaining: number
+}
+
+export interface ItemRef {
+    id: string
+    title: string
+    score: number
+}
+
+export interface DuplicateGroup {
+    password: string
+    items: ItemRef[]
+}
+
+export interface HealthReport {
+    totalItems: number
+    totalPasswords: number
+    totalScore: number
+    weakCount: number
+    duplicateCount: number
+    oldCount: number
+    missing2FA: number
+    breachedCount: number
+    breachCheckError: boolean
+    weakItems: ItemRef[]
+    oldItems: ItemRef[]
+    missing2FAItems: ItemRef[]
+    breachedItems: ItemRef[]
+    duplicateGroups: DuplicateGroup[]
 }
 
 export type Phase = 'loading' | 'setup' | 'unlock' | 'main'
@@ -94,4 +135,15 @@ export interface AppApi {
     ExportCSV(): Promise<string>
     ExportJSON(): Promise<string>
     ExportEncryptedJSON(password: string): Promise<string>
+    GenerateTOTPSetup(itemId: string): Promise<TOTPSetupInfo>
+    GetTOTPCode(itemId: string): Promise<TOTPCode>
+    GetTOTPCodeForSecret(secret: string): Promise<TOTPCode>
+    ValidateTOTPSecret(secret: string): Promise<void>
+    IngestTOTPURI(uri: string): Promise<string>
+    AnalyzeVault(): Promise<HealthReport>
+    IsHelloAvailable(): Promise<boolean>
+    IsHelloEnabled(): Promise<boolean>
+    EnableHello(): Promise<void>
+    DisableHello(): Promise<void>
+    HelloUnlock(file: string): Promise<boolean>
 }

@@ -479,3 +479,77 @@ func (a *App) ExportEncryptedJSON(password string) (string, error) {
 	}
 	return sealTransfer(a.vault.list(), password)
 }
+
+// ---------- TOTP / 2FA ----------
+
+// GenerateTOTPSetup creates a fresh TOTP secret + QR code for an item.
+func (a *App) GenerateTOTPSetup(itemID string) (TOTPSetupInfo, error) {
+	if !a.IsUnlocked() {
+		return TOTPSetupInfo{}, ErrVaultLocked
+	}
+	item, err := a.vault.getItem(itemID)
+	if err != nil {
+		return TOTPSetupInfo{}, err
+	}
+	issuer, account := otpIssuerForItem(item.Title, item.Username)
+	secret, otpauthURL, err := generateTOTPKey(issuer, account)
+	if err != nil {
+		return TOTPSetupInfo{}, err
+	}
+	qr, err := generateTOTPQR(otpauthURL)
+	if err != nil {
+		return TOTPSetupInfo{}, err
+	}
+	return TOTPSetupInfo{Secret: secret, QR: qr, OtpauthURL: otpauthURL}, nil
+}
+
+// GetTOTPCode returns the current code for an item's stored secret.
+func (a *App) GetTOTPCode(itemID string) (TOTPCode, error) {
+	if !a.IsUnlocked() {
+		return TOTPCode{}, ErrVaultLocked
+	}
+	item, err := a.vault.getItem(itemID)
+	if err != nil {
+		return TOTPCode{}, err
+	}
+	if item.TotpSecret == "" {
+		return TOTPCode{}, errors.New("item sem 2FA configurado")
+	}
+	code, seconds, err := totpCode(item.TotpSecret)
+	if err != nil {
+		return TOTPCode{}, err
+	}
+	return TOTPCode{Code: code, SecondsRemaining: seconds}, nil
+}
+
+// GetTOTPCodeForSecret verifies a secret during setup (without saving).
+func (a *App) GetTOTPCodeForSecret(secret string) (TOTPCode, error) {
+	if err := validateTOTPSecret(secret); err != nil {
+		return TOTPCode{}, err
+	}
+	code, seconds, err := totpCode(secret)
+	if err != nil {
+		return TOTPCode{}, err
+	}
+	return TOTPCode{Code: code, SecondsRemaining: seconds}, nil
+}
+
+// ValidateTOTPSecret checks a manually-entered TOTP secret.
+func (a *App) ValidateTOTPSecret(secret string) error {
+	return validateTOTPSecret(secret)
+}
+
+// IngestTOTPURI extracts and validates the secret from a scanned otpauth URI.
+func (a *App) IngestTOTPURI(uri string) (string, error) {
+	return parseTOTPSecretFromURI(uri)
+}
+
+// ---------- Watchtower ----------
+
+// AnalyzeVault returns the password health report for the current vault.
+func (a *App) AnalyzeVault() (HealthReport, error) {
+	if !a.IsUnlocked() {
+		return HealthReport{}, ErrVaultLocked
+	}
+	return analyzeVault(a.vault.list()), nil
+}

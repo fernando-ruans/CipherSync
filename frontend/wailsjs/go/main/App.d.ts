@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function AddTagBatch(arg1:Array<string>,arg2:string):Promise<void>;
 
+export function AnalyzeVault():Promise<main.HealthReport>;
+
 export function ChangeMasterPassword(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function CopyToClipboard(arg1:string):Promise<void>;
@@ -20,6 +22,10 @@ export function DeleteItems(arg1:Array<string>):Promise<void>;
 
 export function DeleteVault(arg1:string):Promise<void>;
 
+export function DisableHello():Promise<void>;
+
+export function EnableHello():Promise<void>;
+
 export function ExportCSV():Promise<string>;
 
 export function ExportEncryptedJSON(arg1:string):Promise<string>;
@@ -34,6 +40,8 @@ export function GeneratePassphrase(arg1:number):Promise<string>;
 
 export function GeneratePassword(arg1:main.PasswordOptions):Promise<string>;
 
+export function GenerateTOTPSetup(arg1:string):Promise<main.TOTPSetupInfo>;
+
 export function GetCurrentVaultName():Promise<string>;
 
 export function GetItemVersions(arg1:string):Promise<Array<main.VersionEntry>>;
@@ -41,6 +49,12 @@ export function GetItemVersions(arg1:string):Promise<Array<main.VersionEntry>>;
 export function GetItems():Promise<Array<main.Item>>;
 
 export function GetSettings():Promise<Record<string, string>>;
+
+export function GetTOTPCode(arg1:string):Promise<main.TOTPCode>;
+
+export function GetTOTPCodeForSecret(arg1:string):Promise<main.TOTPCode>;
+
+export function HelloUnlock(arg1:string):Promise<boolean>;
 
 export function ImportAutoCSV(arg1:string):Promise<main.ImportResult>;
 
@@ -51,6 +65,12 @@ export function ImportCSV(arg1:string,arg2:Array<main.FieldMapping>):Promise<mai
 export function ImportCommit(arg1:Array<main.Item>):Promise<main.ImportResult>;
 
 export function ImportEncryptedTransfer(arg1:string,arg2:string):Promise<main.ImportResult>;
+
+export function IngestTOTPURI(arg1:string):Promise<string>;
+
+export function IsHelloAvailable():Promise<boolean>;
+
+export function IsHelloEnabled():Promise<boolean>;
 
 export function IsUnlocked():Promise<boolean>;
 
@@ -73,5 +93,7 @@ export function SetFavoriteBatch(arg1:Array<string>,arg2:boolean):Promise<void>;
 export function SetSetting(arg1:string,arg2:string):Promise<void>;
 
 export function UpdateItem(arg1:main.Item):Promise<void>;
+
+export function ValidateTOTPSecret(arg1:string):Promise<void>;
 
 export function VaultDir():Promise<string>;

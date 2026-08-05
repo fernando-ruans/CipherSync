@@ -17,7 +17,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:     "LockSync",
+		Title:     "CipherSync",
 		Width:     1200,
 		Height:    800,
 		MinWidth:  940,

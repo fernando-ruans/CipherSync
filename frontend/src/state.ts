@@ -6,6 +6,7 @@ interface AppState {
     phase: Phase
     vaults: VaultInfo[]
     vaultName: string
+    vaultFile: string
     items: Item[]
     selectedId: string | null
     multiSelected: string[]
@@ -14,12 +15,14 @@ interface AppState {
     tag: string
     favoritesOnly: boolean
     favicons: Record<string, string>
+    breachedIds: string[]
     autolockMinutes: number
     defaultType: ItemType
     init: () => Promise<void>
     newVault: () => void
     setup: (name: string, password: string, confirm: string) => Promise<void>
     unlock: (file: string, password: string) => Promise<void>
+    unlockWithHello: (file: string) => Promise<boolean>
     lock: () => Promise<void>
     deleteVault: (file: string) => Promise<void>
     deleteAccount: () => Promise<void>
@@ -31,6 +34,7 @@ interface AppState {
     toggleFavoritesOnly: () => void
     selectItem: (id: string | null) => void
     setFavicon: (domain: string, dataUri: string) => void
+    setBreachedIds: (ids: string[]) => void
     createItem: (draft: Partial<Item>) => Promise<Item>
     updateItem: (item: Item) => Promise<void>
     removeItem: (id: string) => Promise<void>
@@ -50,6 +54,7 @@ export const useApp = create<AppState>((set, get) => ({
     phase: 'loading',
     vaults: [],
     vaultName: '',
+    vaultFile: '',
     items: [],
     selectedId: null,
     multiSelected: [],
@@ -58,6 +63,7 @@ export const useApp = create<AppState>((set, get) => ({
     tag: '',
     favoritesOnly: false,
     favicons: {},
+    breachedIds: [],
     autolockMinutes: 5,
     defaultType: 'login',
 
@@ -85,7 +91,16 @@ export const useApp = create<AppState>((set, get) => ({
         await api.openVault(file, password)
         const items = await api.getItems()
         const vaultName = await api.getCurrentVaultName()
-        set({phase: 'main', items, vaultName, selectedId: null})
+        set({phase: 'main', items, vaultName, vaultFile: file, selectedId: null})
+    },
+
+    unlockWithHello: async (file) => {
+        const ok = await api.helloUnlock(file)
+        if (!ok) return false
+        const items = await api.getItems()
+        const vaultName = await api.getCurrentVaultName()
+        set({phase: 'main', items, vaultName, vaultFile: file, selectedId: null})
+        return true
     },
 
     lock: async () => {
@@ -95,6 +110,7 @@ export const useApp = create<AppState>((set, get) => ({
             set({
                 phase: 'unlock',
                 vaultName: '',
+                vaultFile: '',
                 items: [],
                 selectedId: null,
                 multiSelected: [],
@@ -103,6 +119,7 @@ export const useApp = create<AppState>((set, get) => ({
                 tag: '',
                 favoritesOnly: false,
                 favicons: {},
+                breachedIds: [],
             })
         }
     },
@@ -119,6 +136,7 @@ export const useApp = create<AppState>((set, get) => ({
             phase: 'setup',
             vaults: [],
             vaultName: '',
+            vaultFile: '',
             items: [],
             selectedId: null,
             multiSelected: [],
@@ -155,6 +173,7 @@ export const useApp = create<AppState>((set, get) => ({
     selectItem: (selectedId) => set({selectedId}),
     setFavicon: (domain, dataUri) =>
         set((s) => ({favicons: {...s.favicons, [domain]: dataUri}})),
+    setBreachedIds: (breachedIds) => set({breachedIds}),
 
     createItem: async (draft) => {
         const now = Date.now()
@@ -169,6 +188,7 @@ export const useApp = create<AppState>((set, get) => ({
             category: '',
             tags: [],
             fields: {},
+            totpSecret: '',
             favorite: false,
             createdAt: now,
             updatedAt: now,

@@ -1,6 +1,6 @@
-import {useState} from 'react'
+import {useEffect, useState} from 'react'
 import toast from 'react-hot-toast'
-import {Monitor, Moon, Sun} from 'lucide-react'
+import {Fingerprint, Monitor, Moon, Sun} from 'lucide-react'
 import {useApp} from '../state'
 import {api, errorMessage} from '../lib/api'
 import {Button, Input, Modal, RevealInput} from './ui'
@@ -67,6 +67,35 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
     const [confirmingDelete, setConfirmingDelete] = useState(false)
     const [confirmText, setConfirmText] = useState('')
     const [deleting, setDeleting] = useState(false)
+    const [helloAvailable, setHelloAvailable] = useState(false)
+    const [helloEnabled, setHelloEnabled] = useState(false)
+
+    useEffect(() => {
+        void (async () => {
+            try {
+                const avail = await api.isHelloAvailable()
+                setHelloAvailable(avail)
+                if (avail) setHelloEnabled(await api.isHelloEnabled())
+            } catch {
+                // ignore
+            }
+        })()
+    }, [])
+
+    async function toggleHello() {
+        try {
+            if (helloEnabled) {
+                await api.disableHello()
+                toast.success('Windows Hello desativado')
+            } else {
+                await api.enableHello()
+                toast.success('Windows Hello ativado')
+            }
+            setHelloEnabled(!helloEnabled)
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        }
+    }
 
     async function doDeleteAccount() {
         setDeleting(true)
@@ -140,9 +169,30 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                     )}
                 </Section>
 
+                <Section title="Windows Hello">
+                    {helloAvailable ? (
+                        <>
+                            <p className="mb-2 text-xs text-faint">
+                                Desbloqueie o cofre sem digitar a senha, usando as credenciais da sua sessão Windows
+                                (biometria ou PIN).
+                            </p>
+                            <Button
+                                variant={helloEnabled ? 'danger' : 'subtle'}
+                                className="w-full"
+                                onClick={() => void toggleHello()}
+                            >
+                                <Fingerprint size={16}/>
+                                {helloEnabled ? 'Desativar Windows Hello' : 'Ativar Windows Hello'}
+                            </Button>
+                        </>
+                    ) : (
+                        <p className="text-sm text-faint">Disponível apenas no Windows.</p>
+                    )}
+                </Section>
+
                 <Section title="Sobre">
                     <p className="text-sm text-soft">
-                        <span className="font-semibold text-ink">LockSync</span> v0.3.0 — gerenciador de senhas
+                        <span className="font-semibold text-ink">CipherSync</span> v0.4.0 — gerenciador de senhas
                         open-source. Dados criptografados com AES-256-GCM + Argon2id.
                     </p>
                 </Section>
