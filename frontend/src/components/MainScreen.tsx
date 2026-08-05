@@ -115,7 +115,10 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
                 <div className="flex items-center gap-2">
                     <img src={logo} alt="CipherSync" className="h-9 w-9 rounded-xl object-contain"/>
                     <div className="min-w-0">
-                        <div className="text-sm font-bold text-ink">CipherSync</div>
+                        <div className="text-sm font-bold">
+                            <span className="text-ink">Cipher</span>
+                            <span style={{color: '#3142cb'}}>Sync</span>
+                        </div>
                         <div className="truncate text-[11px] text-faint" title={vaultName || 'Cofre'}>
                             {vaultName || 'Cofre'}
                         </div>

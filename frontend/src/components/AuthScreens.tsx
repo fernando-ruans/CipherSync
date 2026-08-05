@@ -22,7 +22,10 @@ function Shell({children}: {children: React.ReactNode}) {
             <div className="w-full max-w-sm">
                 <div className="mb-8 flex flex-col items-center text-center">
                     <img src={logo} alt="CipherSync" className="mb-4 h-20 w-20 rounded-2xl object-contain drop-shadow-lg"/>
-                    <h1 className="text-2xl font-bold tracking-tight text-ink">CipherSync</h1>
+                    <h1 className="text-2xl font-bold tracking-tight">
+                        <span className="text-ink">Cipher</span>
+                        <span style={{color: '#3142cb'}}>Sync</span>
+                    </h1>
                     <p className="mt-1 text-sm text-mut">Seu cofre de senhas, criptografado.</p>
                 </div>
                 <div className="rounded-2xl border border-edge bg-surface p-6 shadow-2xl">{children}</div>
