@@ -1,5 +1,34 @@
-build/bin
-node_modules
-frontend/dist
-locksync.exe
-ciphersync.exe
+# ---- Binários / artefatos de build ----
+build/bin/
+*.exe
+*.dll
+*.dylib
+*.so
+
+# ---- Frontend ----
+node_modules/
+frontend/dist/
+frontend/package.json.md5
+
+# ---- Dados locais (nunca commit! arquivos de cofre) ----
+*.passapp
+hello-*.blob
+
+# ---- Logs ----
+*.log
+npm-debug.log*
+
+# ---- Sistema operacional ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- IDE / editores ----
+.vscode/
+.idea/
+*.suo
+*.user
+
+# ---- Temp ----
+*.tmp
+*.swp

@@ -1,91 +1,237 @@
+<div align="center">
+
+<img src="ciphersync-logo.png" alt="CipherSync" width="160"/>
+
 # CipherSync
 
-Gerenciador de senhas open-source para Windows e Linux, inspirado no 1Password.
+**Gerenciador de senhas open-source para Windows e Linux, inspirado no 1Password.**
 
-## Stack
+Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dados pertencem a você.
 
-| Camada | Tecnologia |
-|--------|-----------|
-| Backend | Go + Wails v2 |
-| Frontend | React 19 + TypeScript + Tailwind CSS v4 |
-| Estado | Zustand |
-| Banco | SQLite (modernc.org/sqlite — puro Go, sem CGO) |
-| Crypto | Argon2id + AES-256-GCM |
-| Clipboard | Auto-clear após 60s |
+`Go` `Wails v2` `React` `TypeScript` `Tailwind CSS` `SQLite` `Argon2id` `AES-256-GCM`
+
+</div>
+
+---
+
+## Sumário
+
+- [Recursos](#recursos)
+- [Segurança](#segurança)
+- [Arquitetura](#arquitetura)
+- [Onde os dados ficam](#onde-os-dados-ficam)
+- [Importação / Exportação](#importação--exportação)
+- [Atalhos de teclado](#atalhos-de-teclado)
+- [Build](#build)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Testes](#testes)
+- [Roadmap](#roadmap)
+- [Licença](#licença)
+
+---
+
+## Recursos
+
+### Gerenciamento de itens
+- **4 tipos de item**: Login, Nota segura, Cartão de crédito e Identidade (campos dinâmicos por tipo).
+- CRUD completo, busca em tempo real (título, usuário, URL, notas, tags e campos), favoritos, categorias e **tags** com autocomplete.
+- **Histórico de versões**: snapshot a cada alteração (até 50 por item), diff visual e restauração.
+- **Multi-seleção e operações em lote**: excluir, mover para categoria, adicionar tag, favoritar e exportar os itens selecionados.
+- **Favicons** carregados automaticamente com cache local.
+
+### Segurança avançada
+- **TOTP / 2FA integrado** — autenticador de 6 dígitos com QR code por **câmera**, **upload de imagem** ou **chave manual**, com círculo de contagem regressiva.
+- **Watchtower** — painel de saúde das senhas: senhas fracas, duplicadas, antigas, sem 2FA e vazadas, com score geral de 0–100%.
+- **Detecção de vazamento (HIBP)** — verifica se suas senhas já vazaram usando **k-anonymity** (apenas os 5 primeiros caracteres do SHA-1 saem da sua máquina).
+- **Windows Hello** — desbloqueio biométrico via DPAPI (Windows).
+- **Gerador de senhas** — aleatórias (comprimento/tipos de caractere) e por frases (palavras).
+
+### Experiência
+- **Múltiplos cofres** (pessoal, trabalho, família), cada um com sua própria senha mestra, com seletor na tela de desbloqueio.
+- **Auto-lock** configurável (1/5/15/30/60 min ou nunca) e bloqueio ao minimizar a janela.
+- **Temas** Dark / Light / Sistema com persistência.
+- **Importação** de Chrome, Firefox, Edge, LastPass, 1Password e Bitwarden.
+- **Exportação** em CSV, JSON e transferência criptografada `.passapp` entre instâncias do CipherSync.
+- **Exclusão de conta** com confirmação por digitação (`DELETAR TUDO`).
+
+---
 
 ## Segurança
 
-- **Senha mestra** nunca é armazenada; a chave do cofre é derivada via Argon2id e fica apenas em memória.
-- **Cofres locais** — cada cofre é um arquivo `<nome>.passapp` criptografado, com cada item criptografado individualmente com AES-256-GCM.
-- Chave do cofre é criptografada pela chave derivada da senha mestra (troca de senha não re-criptografa os itens).
-- Chaves e buffers são zerados ao bloquear o cofre.
-- Clipboard limpo automaticamente após 60 segundos.
-- **Detecção de vazamento (HIBP)** usa k-anonymity: apenas os 5 primeiros caracteres do SHA-1 da senha saem da máquina.
+O modelo de segurança segue as práticas de gerenciadores consolidados (modelo 1Password):
 
-## Funcionalidades
+```
+Senha mestra (nunca armazenada)
+        │
+        ▼  Argon2id (64 MiB, 4 iterações, 4 threads)
+Chave mestra derivada
+        │
+        ▼  AES-256-GCM
+Chave do cofre (vault key) ──► criptografa cada item individualmente
+```
 
-### Fase 1 — MVP
+- **Senha mestra** nunca é armazenada; a chave do cofre é derivada via **Argon2id** e fica apenas em memória.
+- Cada cofre é um arquivo `<nome>.passapp` (SQLite) com cada item criptografado individualmente com **AES-256-GCM** (nonce único por item).
+- A chave do cofre é criptografada pela chave derivada da senha mestra — **trocar a senha mestra não re-criptografa os itens**.
+- Chaves e buffers são **zerados em memória** ao bloquear o cofre.
+- Clipboard limpo automaticamente após **60 segundos**.
+- **HIBP** usa k-anonymity: apenas os 5 primeiros caracteres do hash SHA-1 da senha são enviados à API pública — nenhuma senha ou hash completo sai da máquina.
+- **Windows Hello** protege a chave do cofre com DPAPI (credenciais da sessão do Windows).
+- Banco de dados em SQLite **puro Go** (modernc.org/sqlite), sem dependência de CGO — facilita o cross-compile para Linux.
 
-- [x] Criação do cofre com senha mestra (indicador de força)
-- [x] Desbloqueio/bloqueio do cofre
-- [x] CRUD de itens (título, usuário, senha, URL, notas, categoria, favorito)
-- [x] Busca em memória (título, usuário, URL, notas)
-- [x] Gerador de senhas aleatórias e por frases (palavras)
-- [x] Copiar para a área de transferência com auto-clear
-- [x] Tema escuro, atalhos `Ctrl+N` (novo), `Ctrl+L` (bloquear)
-- [x] Alterar senha mestra
+---
 
-### Fase 2 — Funcionalidades Essenciais
+## Arquitetura
 
-- [x] **Tipos de item** — Login, Nota segura, Cartão de crédito, Identidade (campos dinâmicos por tipo)
-- [x] **Sistema de tags** — input com autocomplete, chips, filtro na sidebar
-- [x] **Favicons** — fetch automático com cache local (evento em tempo real)
-- [x] **Histórico de versões** — snapshot a cada alteração (até 50/item), diff visual e restore
-- [x] **Import** — CSV genérico com mapeamento de colunas, CSV auto-detectado (Chrome, Edge, Firefox, LastPass, 1Password), Bitwarden JSON (todos os tipos de item), transferência CipherSync criptografada
-- [x] **Export** — CSV, JSON (com aviso de segurança) e transferência criptografada `.passapp`
-- [x] **Temas** — Dark / Light / Sistema, com persistência
-- [x] **Auto-lock** — 1/5/15/30/60 min ou nunca; bloqueia ao minimizar
-- [x] **Atalhos** — `Ctrl+F` busca, `Ctrl+S` salvar, `Ctrl+B` copiar senha, `Ctrl+Shift+C` copiar usuário, `Esc` fecha modais
+```
+┌───────────────────────────────────────────────┐
+│                CipherSync (Wails)              │
+│  ┌──────────────────┐   ┌───────────────────┐  │
+│  │   React + TS UI  │◄──┤    Go Backend     │  │
+│  │  (Tailwind,     │   │   (bindings)      │  │
+│  │   Zustand)      │   └────────┬──────────┘  │
+│  └──────────────────┘            │            │
+│               │            ┌─────┼────────┐   │
+│         ┌─────▼────┐  ┌────▼────┐  ┌────▼─┐  │
+│         │  Crypto  │  │  Vault  │  │ Sync │  │
+│         │  Engine  │  │ (SQLite)│  │ (fut.)│  │
+│         └──────────┘  └─────────┘  └──────┘  │
+└───────────────────────────────────────────────┘
+```
 
-### Fase 3 — Gerenciamento
+| Camada | Tecnologia |
+|--------|-----------|
+| Backend | Go 1.25+ com Wails v2 |
+| Frontend | React 19 + TypeScript |
+| Estilo | Tailwind CSS v4 |
+| Estado | Zustand |
+| Banco | SQLite via modernc.org/sqlite (puro Go, sem CGO) |
+| Crypto | golang.org/x/crypto (Argon2id), AES-256-GCM |
+| TOTP/QR | pquerna/otp + skip2/go-qrcode |
+| Scanner QR | jsqr (webcam/upload no frontend) |
+| Clipboard | atotto/clipboard com auto-clear |
 
-- [x] **Multi-seleção** — checkboxes na lista, `Ctrl+A` (todos), `Ctrl+Click` (individual), `Shift+Click` (intervalo)
-- [x] **Operações em lote** — excluir (`Ctrl+D`), mover para categoria, adicionar tag, favoritar/desfavoritar e exportar (CSV/JSON) os itens selecionados
-- [x] **Múltiplos cofres** — crie quantos cofres quiser (pessoal, trabalho, família), cada um com sua senha mestra; seletor na tela de desbloqueio e "Trocar de cofre" na sidebar
-- [x] **Exclusão de conta** — apaga todos os cofres e dados, resetando o app; exige digitar `DELETAR TUDO` para confirmar
+---
 
-### Fase 4 — Segurança Avançada
+## Onde os dados ficam
 
-- [x] **TOTP/2FA integrado** — autenticador de 6 dígitos com QR code por câmera, upload de imagem ou chave manual
-- [x] **Watchtower** — painel de saúde das senhas (fracas, duplicadas, antigas, sem 2FA)
-- [x] **Detecção de vazamento (HIBP)** — verifica se senhas já vazaram via k-anonymity
-- [x] **Windows Hello** — desbloqueio biométrico via DPAPI (Windows)
-- [x] **Logotipo oficial** — ícone do app gerado a partir do logo da marca
+Os cofres ficam no diretório de configuração do usuário:
 
-## Roadmap
+- **Windows**: `%APPDATA%\CipherSync\`
+- **Linux**: `~/.config/CipherSync/`
 
-- **Fase 5** — Sincronização pluggable (arquivo, Dropbox, Google Drive, WebDAV) com resolução de conflitos
-- **Fase 6** — Campos customizados, anexos, travel mode, emergency kit, compartilhamento
-- **Fase 7** — System tray, quick access, extensão de navegador, backups, CI/CD
+```
+CipherSync/
+├── pessoal.passapp        # cofre criptografado (SQLite)
+├── trabalho.passapp       # múltiplos cofres suportados
+└── hello-pessoal.blob     # chave protegida por DPAPI (Windows Hello)
+```
 
-## Desenvolvimento
+> ⚠️ Os arquivos `.passapp` são criptografados, mas **faça backups** do diretório acima. Sem a senha mestra, os dados são irrecuperáveis.
 
-Pré-requisitos: Go 1.25+, Node 20+, Wails CLI.
+---
+
+## Importação / Exportação
+
+O import é feito pelo menu **Importar** na sidebar:
+
+| Formato | Detecção | Tipos de item |
+|---------|----------|---------------|
+| CSV Chrome / Edge / Brave | Automática por cabeçalho | Login |
+| CSV Firefox | Automática (título derivado do domínio) | Login |
+| CSV LastPass | Automática | Login |
+| CSV 1Password | Automática | Login |
+| CSV genérico | Mapeamento manual de colunas | Login |
+| Bitwarden JSON | Nativa | Login, Nota, Cartão, Identidade |
+| Transferência CipherSync (`.passapp`) | Criptografada | Todos |
+
+O export gera **CSV**, **JSON** (com aviso de segurança) ou **transferência criptografada** com senha.
+
+---
+
+## Atalhos de teclado
+
+| Atalho | Ação |
+|--------|------|
+| `Ctrl+N` | Novo item |
+| `Ctrl+F` | Focar na busca |
+| `Ctrl+S` | Salvar item em edição |
+| `Ctrl+B` | Copiar senha do item selecionado |
+| `Ctrl+Shift+C` | Copiar usuário do item selecionado |
+| `Ctrl+A` | Selecionar todos os itens visíveis |
+| `Ctrl+D` | Excluir itens selecionados |
+| `Ctrl+Shift` + clique | Seleção em intervalo |
+| `Ctrl+clique` | Selecionar item individual |
+| `Ctrl+L` | Bloquear o cofre |
+| `Esc` | Fechar modal / limpar seleção |
+
+---
+
+## Build
+
+Pré-requisitos: **Go 1.25+**, **Node 20+**, **Wails CLI** (e [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) no Windows).
 
 ```bash
+# instala o CLI do Wails (uma vez)
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-# desenvolvimento (hot reload)
+# desenvolvimento com hot reload
 wails dev
 
-# build de produção
+# build de produção (Windows: gera .exe + instalador NSIS se disponível)
 wails build
+
+# build limpo
+wails build -clean
 ```
 
 O executável é gerado em `build/bin/`.
 
-> No Linux, o gerador de senhas e o clipboard usam ferramentas padrão do desktop
-> (xclip/xsel ou wl-clipboard no Wayland).
+### Linux
+
+- Dependências nativas: `libgtk-3-dev`, `libwebkit2gtk-4.0-dev` (ou `-4.1`) e `build-essential`.
+- Clipboard/favicons usam ferramentas padrão do desktop (xclip/xsel ou wl-clipboard no Wayland).
+- Windows Hello não está disponível no Linux (opção oculta na interface).
+
+### Ícone
+
+Para regenerar os ícones a partir de `ciphersync-logo.png`:
+
+```powershell
+.\make_icon.ps1
+```
+
+---
+
+## Estrutura do projeto
+
+```
+.
+├── app.go                # bindings Wails (API do frontend)
+├── crypto.go             # Argon2id + AES-256-GCM
+├── vault.go              # cofre SQLite, CRUD, versões, batch ops
+├── vaults.go             # múltiplos cofres, slugify, listagem
+├── totp.go               # TOTP/2FA
+├── watchtower.go         # análise de saúde + HIBP
+├── hello.go              # Windows Hello (bindings)
+├── hello_windows.go      # DPAPI (build tag windows)
+├── hello_unsupported.go  # stub para não-Windows
+├── import_export.go      # import/export + transferência criptografada
+├── generator.go          # gerador de senhas/frases
+├── wordlist.go           # wordlist para frases
+├── favicon.go            # fetch de favicons com cache
+├── main.go               # entrada do app
+├── frontend/
+│   └── src/
+│       ├── components/   # UI (ItemDetail, Watchtower, TOTP, modais...)
+│       ├── lib/          # api, types, theme, autolock
+│       └── state.ts      # store Zustand
+├── testdata/             # arquivos de teste para import
+├── make_icon.ps1         # gera ícones a partir da logo
+└── wails.json            # configuração do Wails
+```
+
+---
 
 ## Testes
 
@@ -93,10 +239,31 @@ O executável é gerado em `build/bin/`.
 go test ./...
 ```
 
-- `testdata/1password_export.csv` — exportação de exemplo no formato padrão do 1Password (50 cadastros) para testar o import.
-- `testdata/chrome_passwords.csv` — exportação de exemplo no formato do Chrome/Edge (26 cadastros) para testar o import de navegador.
-- `testdata/bitwarden_export.json` — exportação Bitwarden multi-tipo (6 logins, 5 notas, 5 cartões, 4 identidades) com categorias.
+Os testes cobrem: ciclo de vida do cofre, troca de senha mestra, migração de schema, batch operations, múltiplos cofres, import/export (CSV, Bitwarden, transferência), TOTP/QR, análise do Watchtower, abertura por chave e DPAPI round-trip.
+
+Arquivos de teste de import em `testdata/`:
+- `1password_export.csv` — 50 cadastros no formato do 1Password
+- `chrome_passwords.csv` — 26 cadastros no formato do Chrome/Edge
+- `bitwarden_export.json` — 20 itens multi-tipo (6 logins, 5 notas, 5 cartões, 4 identidades)
+
+---
+
+## Roadmap
+
+- **Fase 5** — Sincronização pluggable (arquivo local, Dropbox, Google Drive, WebDAV) com resolução de conflitos
+- **Fase 6** — Campos customizados por item, anexos, travel mode, emergency kit, compartilhamento
+- **Fase 7** — System tray, quick access (popup global), extensão de navegador, backups agendados, CI/CD
+
+---
 
 ## Licença
 
-MIT — veja [LICENSE](LICENSE).
+Distribuído sob a licença **MIT** — veja [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+
+Feito com 🧠, 🔐 e Go.
+
+</div>
