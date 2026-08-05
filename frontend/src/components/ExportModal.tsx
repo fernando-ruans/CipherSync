@@ -1,4 +1,4 @@
-import {useState} from 'react'
+﻿import {useState} from 'react'
 import toast from 'react-hot-toast'
 import {Download, Loader2} from 'lucide-react'
 import {api, errorMessage} from '../lib/api'
@@ -53,7 +53,7 @@ export function ExportModal({onClose}: {onClose: () => void}) {
                         [
                             {value: 'csv', label: 'CSV', hint: 'Legível, abre em qualquer planilha'},
                             {value: 'json', label: 'JSON (sem criptografia)', hint: 'Apenas para uso próprio'},
-                            {value: 'transfer', label: 'Transferência LockSync', hint: 'Criptografado com senha, para outro LockSync'},
+                            {value: 'transfer', label: 'Transferência CipherSync', hint: 'Criptografado com senha, para outro CipherSync'},
                         ] as const
                     ).map((o) => (
                         <button

@@ -5,7 +5,6 @@ import {
     Fingerprint,
     KeyRound,
     Loader2,
-    Lock,
     Plus,
     ShieldCheck,
     Trash2,
@@ -15,15 +14,14 @@ import {useApp} from '../state'
 import {api, errorMessage} from '../lib/api'
 import {Button, Input, RevealInput, StrengthMeter} from './ui'
 import type {VaultInfo} from '../lib/types'
+import logo from '../assets/ciphersync-logo-128.png'
 
 function Shell({children}: {children: React.ReactNode}) {
     return (
         <div className="flex h-full items-center justify-center bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.15),transparent_60%)]">
             <div className="w-full max-w-sm">
                 <div className="mb-8 flex flex-col items-center text-center">
-                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/30">
-                        <Lock size={32} className="text-white"/>
-                    </div>
+                    <img src={logo} alt="CipherSync" className="mb-4 h-20 w-20 rounded-2xl object-contain drop-shadow-lg"/>
                     <h1 className="text-2xl font-bold tracking-tight text-ink">CipherSync</h1>
                     <p className="mt-1 text-sm text-mut">Seu cofre de senhas, criptografado.</p>
                 </div>

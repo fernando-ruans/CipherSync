@@ -8,7 +8,6 @@ import {
     Folder,
     Globe,
     Layers,
-    Lock,
     LogOut,
     Minus,
     Plus,
@@ -33,6 +32,7 @@ import {WatchtowerModal} from './WatchtowerModal'
 import {extractDomain, downloadFile} from '../lib/util'
 import type {Item} from '../lib/types'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
+import logo from '../assets/ciphersync-logo-64.png'
 
 function Favicon({url, domain}: {url: string; domain: string}) {
     const favicons = useApp((s) => s.favicons)
@@ -113,9 +113,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
         <aside className="flex w-56 shrink-0 flex-col border-r border-edge bg-panel">
             <div className="px-4 py-4">
                 <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600">
-                        <Lock size={16} className="text-white"/>
-                    </div>
+                    <img src={logo} alt="CipherSync" className="h-9 w-9 rounded-xl object-contain"/>
                     <div className="min-w-0">
                         <div className="text-sm font-bold text-ink">CipherSync</div>
                         <div className="truncate text-[11px] text-faint" title={vaultName || 'Cofre'}>
