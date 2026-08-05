@@ -78,6 +78,7 @@ export function ItemDetail() {
     const selectedId = useApp((s) => s.selectedId)
     const updateItem = useApp((s) => s.updateItem)
     const removeItem = useApp((s) => s.removeItem)
+    const breached = useApp((s) => s.breachedIds.includes(selectedId ?? ''))
 
     const item = items.find((i) => i.id === selectedId) ?? null
 
@@ -172,7 +173,6 @@ export function ItemDetail() {
 
     const domain = draft.url ? extractDomain(draft.url) : ''
     const tagSuggestions = [...new Set(items.flatMap((i) => i.tags ?? []))]
-    const breached = useApp((s) => s.breachedIds.includes(item.id))
 
     return (
         <div className="flex h-full flex-col overflow-y-auto p-6">
