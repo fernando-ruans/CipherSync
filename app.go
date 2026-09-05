@@ -29,18 +29,36 @@ type App struct {
 	vaultName string
 	clipMu    sync.Mutex
 	clipStop  chan struct{}
-	qaMu      sync.Mutex
-	qaOpen    bool
-	qaPrevW   int
-	qaPrevH   int
-	qaHotkey  bool
-	syncMu    sync.Mutex
+	qaMu       sync.Mutex
+	qaOpen     bool
+	qaPrevW    int
+	qaPrevH    int
+	qaHotkey   bool
+	qaThreadID uint32
+	syncMu     sync.Mutex
 	syncStatus SyncStatus
+	syncRun    sync.Mutex
 	localAPIMu sync.Mutex
 	localAPI   *localAPIServer
+	quitMu     sync.Mutex
+	quitting   bool
 }
 
 var errQuickAccessUnsupported = errors.New("quick access disponível apenas no Windows")
+
+// setQuitting marks the app as shutting down so OnBeforeClose does not veto
+// the close (the tray Quit would otherwise leave a headless zombie).
+func (a *App) setQuitting() {
+	a.quitMu.Lock()
+	a.quitting = true
+	a.quitMu.Unlock()
+}
+
+func (a *App) isQuitting() bool {
+	a.quitMu.Lock()
+	defer a.quitMu.Unlock()
+	return a.quitting
+}
 
 // NewApp creates a new App application struct.
 func NewApp() *App {
@@ -51,6 +69,9 @@ func NewApp() *App {
 // so we can call the runtime methods.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// remove a stale token file left by a previous crashed session; the
+	// native host must not trust endpoints from old runs
+	_ = os.Remove(a.localAPIInfoPath())
 	// Global hotkey is ON by default; OpenVault re-checks the vault setting.
 	a.qaMu.Lock()
 	_ = a.enableQuickAccessHotkey()
@@ -76,7 +97,7 @@ func (a *App) buildSyncProvider(v *Vault) (SyncProvider, string, error) {
 		if remote == "" {
 			return nil, "", errors.New("pasta de sincronização não configurada")
 		}
-		return &localProvider{dir: remote}, "", nil
+		return &localProvider{dir: remote}, remote, nil
 	default:
 		return nil, "", errors.New("sincronização não configurada")
 	}
@@ -112,6 +133,9 @@ func (a *App) SetSyncConfig(provider, remote string) error {
 	if err := v.setSetting("sync_provider", provider); err != nil {
 		return err
 	}
+	if provider == "" {
+		remote = ""
+	}
 	if err := v.setSetting("sync_remote", remote); err != nil {
 		return err
 	}
@@ -140,7 +164,10 @@ func (a *App) setSyncStatus(s SyncStatus) {
 }
 
 // SyncNow runs one sync cycle for the current vault.
+// Serialized via syncRun so the 60s scheduler and manual syncs never race.
 func (a *App) SyncNow() (string, error) {
+	a.syncRun.Lock()
+	defer a.syncRun.Unlock()
 	v := a.currentVault()
 	if v == nil {
 		return "", ErrVaultLocked
@@ -148,12 +175,9 @@ func (a *App) SyncNow() (string, error) {
 	a.vaultMu.RLock()
 	file := a.vaultFile
 	a.vaultMu.RUnlock()
-	provider, remote, err := a.buildSyncProvider(v)
+	provider, syncFolder, err := a.buildSyncProvider(v)
 	if err != nil {
 		return "", err
-	}
-	if remote == "" {
-		remote = file
 	}
 	localPath := filepath.Join(a.VaultDir(), file)
 
@@ -161,13 +185,61 @@ func (a *App) SyncNow() (string, error) {
 	key := append([]byte{}, v.vaultKey...)
 	defer wipe(key)
 
-	engine := &SyncEngine{provider: provider, remote: remote}
+	backupPath := localPath + ".presync.bak"
+	defer os.Remove(backupPath)
+
+	engine := &SyncEngine{provider: provider, remote: file}
+	// push: consistent snapshot via VACUUM INTO (plain copy of a live DB can
+	// catch a mid-write state and corrupt the remote copy).
+	engine.snapshot = func() (string, error) {
+		info, err := os.Stat(localPath)
+		if err != nil {
+			return "", err
+		}
+		tmp, err := os.CreateTemp("", "ciphersync-sync-*.passapp")
+		if err != nil {
+			return "", err
+		}
+		tmpPath := tmp.Name()
+		tmp.Close()
+		if err := v.backupTo(tmpPath); err != nil {
+			os.Remove(tmpPath)
+			return "", err
+		}
+		_ = os.Chtimes(tmpPath, info.ModTime(), info.ModTime())
+		return tmpPath, nil
+	}
+	// pull: close the vault BEFORE the file swap (Windows cannot replace an
+	// open SQLite file) and keep a rollback copy until reload succeeds.
+	engine.preSwap = func() error {
+		a.vaultMu.Lock()
+		cur := a.vault
+		a.vault = nil
+		a.vaultMu.Unlock()
+		if cur != nil {
+			cur.close()
+		}
+		return copyFile(localPath, backupPath)
+	}
+	reload := func() error {
+		if err := a.reloadVaultAfterSync(file, key); err != nil {
+			// swap produced an unusable vault: restore previous file and retry
+			if rb, statErr := os.Stat(backupPath); statErr == nil && rb.Size() > 0 {
+				_ = copyFile(backupPath, localPath)
+				if err2 := a.reloadVaultAfterSync(file, key); err2 == nil {
+					return nil
+				}
+			}
+			return err
+		}
+		return nil
+	}
 	result, err := engine.syncFile(localPath,
 		func() (syncState, error) { return loadSyncState(localPath) },
 		func(s syncState) error { return saveSyncState(localPath, s) },
-		func() error { return a.reloadVaultAfterSync(file, key) },
+		reload,
 	)
-	status := SyncStatus{Configured: true, Provider: provider.Name(), State: "ok", LastSync: time.Now().UnixMilli()}
+	status := SyncStatus{Configured: true, Provider: provider.Name(), Remote: syncFolder, State: "ok", LastSync: time.Now().UnixMilli()}
 	if err != nil {
 		status.State = "error"
 		status.Detail = err.Error()
@@ -225,30 +297,34 @@ func (a *App) syncScheduler() {
 
 // ---------- Quick Access (global hotkey popup) ----------
 
-// enableQuickAccessHotkey registers Ctrl+Shift+Space once and starts the
-// listener loop. Caller must hold qaMu.
+// enableQuickAccessHotkey starts the hotkey thread: it locks an OS thread,
+// registers Ctrl+Shift+Space on it and pumps messages until stopped.
+// Caller must hold qaMu.
 func (a *App) enableQuickAccessHotkey() error {
 	if a.qaHotkey {
 		return nil
 	}
-	if err := registerQuickAccessHotkey(); err != nil {
+	tid, err := startQuickAccessHotkey(func() {
+		a.openQuickAccess()
+	})
+	if err != nil {
 		return err
 	}
 	a.qaHotkey = true
-	go quickAccessLoop(func() {
-		a.openQuickAccess()
-	})
+	a.qaThreadID = tid
 	return nil
 }
 
-// disableQuickAccessHotkey unregisters the global hotkey.
+// disableQuickAccessHotkey stops the pump thread and unregisters the
+// hotkey (unregister happens on the registering thread inside the pump).
 // Caller must hold qaMu.
 func (a *App) disableQuickAccessHotkey() {
 	if !a.qaHotkey {
 		return
 	}
-	unregisterQuickAccessHotkey()
+	stopQuickAccessHotkey(a.qaThreadID)
 	a.qaHotkey = false
+	a.qaThreadID = 0
 }
 
 // SetQuickAccess enables/disables the global Ctrl+Shift+Space popup.
@@ -309,6 +385,7 @@ func (a *App) CloseQuickAccess() {
 	open := a.qaOpen
 	w, h := a.qaPrevW, a.qaPrevH
 	a.qaOpen = false
+	a.qaPrevW, a.qaPrevH = 0, 0
 	a.qaMu.Unlock()
 	if a.ctx == nil {
 		return
@@ -489,6 +566,27 @@ func (a *App) ChangeMasterPassword(oldPassword, newPassword, confirm string) err
 	return v.changeMasterPassword(oldPassword, newPassword)
 }
 
+// resetQuickAccessState undoes the reshaped popup window (size, always-on-top)
+// and notifies the frontend. Used when the window is hidden to tray or the
+// vault is locked while the Quick Access popup is open.
+func (a *App) resetQuickAccessState() {
+	a.qaMu.Lock()
+	open := a.qaOpen
+	w, h := a.qaPrevW, a.qaPrevH
+	a.qaOpen = false
+	a.qaPrevW, a.qaPrevH = 0, 0
+	a.qaMu.Unlock()
+	if !open || a.ctx == nil {
+		return
+	}
+	runtime.WindowSetAlwaysOnTop(a.ctx, false)
+	if w > 0 && h > 0 {
+		runtime.WindowSetSize(a.ctx, w, h)
+		runtime.WindowCenter(a.ctx)
+	}
+	runtime.EventsEmit(a.ctx, "quick-access-close")
+}
+
 // Lock locks the currently unlocked vault and wipes keys from memory.
 func (a *App) Lock() {
 	a.vaultMu.Lock()
@@ -501,6 +599,7 @@ func (a *App) Lock() {
 		v.close()
 	}
 	a.stopLocalAPI()
+	a.resetQuickAccessState()
 }
 
 // GetItems returns all active (non-trashed) items of the unlocked vault.
@@ -566,6 +665,15 @@ func (a *App) RestoreTrashed(id string) error {
 		return ErrVaultLocked
 	}
 	return v.restoreTrashed(id)
+}
+
+// RestoreTrashedBatch brings multiple trashed items back in one transaction.
+func (a *App) RestoreTrashedBatch(ids []string) error {
+	v := a.currentVault()
+	if v == nil {
+		return ErrVaultLocked
+	}
+	return v.restoreTrashedItems(ids)
 }
 
 // PurgeTrashed permanently removes the given items (and their versions/attachments).
@@ -885,6 +993,9 @@ func (a *App) SetAutolockMinutes(minutes int) error {
 	v := a.currentVault()
 	if v == nil {
 		return ErrVaultLocked
+	}
+	if minutes < 0 {
+		return errors.New("invalid autolock timeout")
 	}
 	return v.setSetting("autolock_minutes", strconv.Itoa(minutes))
 }

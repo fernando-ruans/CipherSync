@@ -90,11 +90,14 @@ export function TOTPDisplay({itemId}: {itemId: string}) {
 }
 
 // useTOTPCode computes the current code locally for inline displays.
+// Instead of ticking every second it re-schedules for the next TOTP period:
+// with many rows that means ~1 computation/30s per item instead of 1/s.
 export function useTOTPCode(secret: string | undefined) {
     const [state, setState] = useState({code: '', remaining: 0})
     useEffect(() => {
         if (!secret) return
         let alive = true
+        let timer: number | undefined
         const tick = async () => {
             try {
                 const c = await localTOTP(secret)
@@ -103,15 +106,15 @@ export function useTOTPCode(secret: string | undefined) {
                     if (prev.code === c.code && prev.remaining === c.remaining) return prev
                     return {code: c.code, remaining: c.remaining}
                 })
+                timer = window.setTimeout(tick, Math.max(1000, c.remaining * 1000))
             } catch {
                 // ignore
             }
         }
         void tick()
-        const id = setInterval(tick, 1000)
         return () => {
             alive = false
-            clearInterval(id)
+            if (timer) clearTimeout(timer)
         }
     }, [secret])
     return state

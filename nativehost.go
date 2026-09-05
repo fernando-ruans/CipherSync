@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mattn/go-isatty"
@@ -20,14 +22,26 @@ import (
 const nativeHostName = "com.ciphersync.host"
 
 // isNativeHostInvocation detects a browser-spawned launch: either the
-// explicit flag, or browser args (origin/extension id) with piped stdin.
+// explicit flag, or piped stdin plus a non-file argument. Browsers always
+// pipe stdin and pass non-file args (extension origin, browser flags);
+// GUI launches with args almost always pass an existing file path
+// (e.g. "Open with" on a vault), which keeps the GUI alive.
 func isNativeHostInvocation() bool {
 	for _, a := range os.Args[1:] {
 		if a == "--native-host" {
 			return true
 		}
 	}
-	if len(os.Args) > 1 && !isatty.IsTerminal(os.Stdin.Fd()) {
+	if isatty.IsTerminal(os.Stdin.Fd()) {
+		return false
+	}
+	for _, a := range os.Args[1:] {
+		if a == "" {
+			continue
+		}
+		if _, err := os.Stat(a); err == nil {
+			continue // existing file: GUI-style launch argument
+		}
 		return true
 	}
 	return false
@@ -160,7 +174,8 @@ func callLocalAPI(action string, req map[string]interface{}) (map[string]interfa
 		Port  int    `json:"port"`
 		Token string `json:"token"`
 	}
-	if err := json.Unmarshal(infoRaw, &info); err != nil || info.Port == 0 || info.Token == "" {
+	// port must be a sane TCP port; anything else means a corrupt file
+	if err := json.Unmarshal(infoRaw, &info); err != nil || info.Port < 1 || info.Port > 65535 || info.Token == "" {
 		return nil, errLocalDown
 	}
 	body, _ := json.Marshal(req)
@@ -201,6 +216,13 @@ func localAPIInfoPathGlobal() string {
 // pairingsPathOverride allows tests to redirect the pairing store.
 var pairingsPathOverride = ""
 
+// pairingsMu serializes load-modify-save cycles across host/GUI processes
+// that could otherwise lose codes or ids.
+var pairingsMu sync.Mutex
+
+// pairingPendingTTL is how long a generated code can be redeemed.
+const pairingPendingTTL = 10 * time.Minute
+
 func pairingsPath() string {
 	if pairingsPathOverride != "" {
 		return pairingsPathOverride
@@ -227,16 +249,46 @@ func pairingsSave(m map[string]string) {
 	_ = os.WriteFile(pairingsPath(), raw, 0o600)
 }
 
+// gcPairings drops expired pending codes so the store does not grow forever.
+func gcPairings(m map[string]string) {
+	now := time.Now().UnixMilli()
+	for k, v := range m {
+		if !strings.HasPrefix(k, "pending:") {
+			continue
+		}
+		if exp, ok := parsePendingValue(v); ok && now > exp {
+			delete(m, k)
+		}
+	}
+}
+
+// parsePendingValue reads the expiry encoded in a pending entry
+// ("pending:<unix-millis>"). Legacy entries ("pending") never expire.
+func parsePendingValue(v string) (int64, bool) {
+	parts := strings.SplitN(v, ":", 2)
+	if len(parts) != 2 || parts[0] != "pending" {
+		return 0, false
+	}
+	exp, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return exp, true
+}
+
 // GeneratePairingCode creates a one-time code shown in Settings for the user
-// to paste into the browser extension. Returns the code.
+// to paste into the browser extension. The code expires after 10 minutes.
 func GeneratePairingCode() (string, error) {
 	b := make([]byte, 6)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	code := strings.ToUpper(base64.RawURLEncoding.EncodeToString(b))[:8]
+	pairingsMu.Lock()
+	defer pairingsMu.Unlock()
 	m := pairingsLoad()
-	m["pending:"+code] = "pending"
+	gcPairings(m)
+	m["pending:"+code] = fmt.Sprintf("pending:%d", time.Now().Add(pairingPendingTTL).UnixMilli())
 	pairingsSave(m)
 	return code, nil
 }
@@ -246,8 +298,16 @@ func pairingsConsume(code string) (string, error) {
 	if code == "" {
 		return "", fmt.Errorf("bad code")
 	}
+	pairingsMu.Lock()
+	defer pairingsMu.Unlock()
 	m := pairingsLoad()
-	if m["pending:"+code] == "" {
+	v := m["pending:"+code]
+	if v == "" {
+		return "", fmt.Errorf("bad code")
+	}
+	if exp, ok := parsePendingValue(v); ok && time.Now().UnixMilli() > exp {
+		delete(m, "pending:"+code)
+		pairingsSave(m)
 		return "", fmt.Errorf("bad code")
 	}
 	delete(m, "pending:"+code)
@@ -263,6 +323,8 @@ func pairingsCheck(id string) bool {
 	if id == "" {
 		return false
 	}
+	pairingsMu.Lock()
+	defer pairingsMu.Unlock()
 	m := pairingsLoad()
 	return m[id] == "paired"
 }

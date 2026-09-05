@@ -539,6 +539,45 @@ func (v *Vault) restoreTrashed(id string) error {
 	return v.persistItem(*it)
 }
 
+// restoreTrashedItems restores multiple soft-deleted items in one transaction.
+func (v *Vault) restoreTrashedItems(ids []string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	type change struct {
+		idx  int
+		item Item
+	}
+	var changes []change
+	for i := range v.items {
+		if v.items[i].Deleted && contains(ids, v.items[i].ID) {
+			ni := v.items[i]
+			ni.Deleted = false
+			ni.DeletedAt = 0
+			changes = append(changes, change{i, ni})
+		}
+	}
+	if len(changes) == 0 {
+		return ErrItemNotFound
+	}
+	tx, err := v.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, c := range changes {
+		if err := v.persistItemTx(tx, c.item); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, c := range changes {
+		v.items[c.idx] = c.item
+	}
+	return nil
+}
+
 // delete permanently removes an item, its versions and attachments.
 func (v *Vault) delete(id string) error {
 	v.mu.Lock()
@@ -886,6 +925,13 @@ func (v *Vault) restoreVersion(versionID string) (Item, error) {
 	if !ok {
 		return Item{}, ErrItemNotFound
 	}
+	// a restored version must pass the same checks as an edit (no duplicate
+	// or invalid passkey resurrection)
+	if restored.Passkey != nil {
+		if err := validatePasskey(restored.ID, restored.Passkey, v.items); err != nil {
+			return Item{}, err
+		}
+	}
 	if err := v.addVersion(*current); err != nil {
 		return Item{}, err
 	}
@@ -1163,6 +1209,11 @@ func contains(list []string, s string) bool {
 }
 
 func parseIntDefault(s string, def int) (int, error) {
+	// absent/empty setting falls back to the default (0 must stay explicit,
+	// e.g. trash_days=0 = keep forever)
+	if s == "" {
+		return def, nil
+	}
 	n := 0
 	for _, c := range s {
 		if c < '0' || c > '9' {
@@ -1170,6 +1221,5 @@ func parseIntDefault(s string, def int) (int, error) {
 		}
 		n = n*10 + int(c-'0')
 	}
-	// 0 is valid (e.g. trash_days=0 means keep forever)
 	return n, nil
 }

@@ -154,6 +154,7 @@ export interface AppApi {
     DeleteItems(ids: string[]): Promise<void>
     ListTrashed(): Promise<Item[]>
     RestoreTrashed(id: string): Promise<void>
+    RestoreTrashedBatch(ids: string[]): Promise<void>
     PurgeTrashed(ids: string[]): Promise<void>
     SetTrashDays(days: number): Promise<void>
     AddAttachment(itemId: string, name: string, dataB64: string): Promise<Attachment>

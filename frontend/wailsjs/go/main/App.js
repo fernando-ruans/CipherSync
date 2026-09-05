@@ -202,6 +202,10 @@ export function RestoreTrashed(arg1) {
   return window['go']['main']['App']['RestoreTrashed'](arg1);
 }
 
+export function RestoreTrashedBatch(arg1) {
+  return window['go']['main']['App']['RestoreTrashedBatch'](arg1);
+}
+
 export function RestoreVersion(arg1) {
   return window['go']['main']['App']['RestoreVersion'](arg1);
 }

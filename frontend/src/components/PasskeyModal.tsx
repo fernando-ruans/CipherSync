@@ -59,7 +59,7 @@ export function PasskeyModal({
                 <Input label={t('passkey.rpName')} value={form.rpName} onChange={(v) => set('rpName', v)} placeholder="GitHub"/>
                 <Input label={t('passkey.username')} value={form.username} onChange={(v) => set('username', v)}/>
                 <div className="col-span-2">
-                    <Input label={t('passkey.credentialId')} value={form.credentialId} onChange={(v) => set('credentialId', v)} placeholder="..."/>
+                    <Input label={t('passkey.credentialId')} value={form.credentialId} onChange={(v) => set('credentialId', v)} placeholder={t('passkey.credPh')}/>
                 </div>
                 <Input label={t('passkey.userHandle')} value={form.userHandle} onChange={(v) => set('userHandle', v)}/>
                 <Input label={t('passkey.displayName')} value={form.displayName} onChange={(v) => set('displayName', v)}/>
@@ -69,12 +69,15 @@ export function PasskeyModal({
                 <div className="col-span-2">
                     <Input label={t('passkey.publicKey')} value={form.publicKey} onChange={(v) => set('publicKey', v)}/>
                 </div>
-                <Input label={t('passkey.aaguid')} value={form.aaguid} onChange={(v) => set('aaguid', v)} placeholder="00000000-..."/>
+                <Input label={t('passkey.aaguid')} value={form.aaguid} onChange={(v) => set('aaguid', v)} placeholder={t('passkey.credPh')}/>
                 <Input
                     label={t('passkey.coseAlg')}
                     value={String(form.coseAlg)}
-                    onChange={(v) => set('coseAlg', Number(v) || -7)}
-                    placeholder="-7 (ES256)"
+                    onChange={(v) => {
+                        const n = Number(v)
+                        set('coseAlg', Number.isFinite(n) ? n : -7)
+                    }}
+                    placeholder={t('passkey.algPh')}
                 />
             </div>
             <div className="mt-3">

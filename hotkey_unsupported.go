@@ -2,13 +2,10 @@
 
 package main
 
-// registerQuickAccessHotkey is only supported on Windows for now.
-func registerQuickAccessHotkey() error {
-	return errQuickAccessUnsupported
+// startQuickAccessHotkey is only supported on Windows for now.
+func startQuickAccessHotkey(onHotkey func()) (uint32, error) {
+	return 0, errQuickAccessUnsupported
 }
 
-// unregisterQuickAccessHotkey is a no-op off Windows.
-func unregisterQuickAccessHotkey() {}
-
-// quickAccessLoop never fires off Windows.
-func quickAccessLoop(onHotkey func()) {}
+// stopQuickAccessHotkey is a no-op off Windows.
+func stopQuickAccessHotkey(threadID uint32) {}

@@ -30,14 +30,14 @@ export function QuickAccess() {
     }, [])
 
     useEffect(() => {
-        if (open) {
-            setTimeout(() => inputRef.current?.focus(), 50)
-        }
-    }, [open ])
+        if (!open) return
+        const id = setTimeout(() => inputRef.current?.focus(), 50)
+        return () => clearTimeout(id)
+    }, [open])
 
     const results = useMemo(() => {
         const q = query.trim().toLowerCase()
-        const pool = items.filter((i) => !i.deleted && i.type === 'login' && i.password)
+        const pool = items.filter((i) => !i.deleted && (i.type === 'login' || i.type === 'passkey') && (i.password || i.passkey))
         if (q === '') return pool.slice(0, 8)
         return pool
             .filter(

@@ -47,7 +47,7 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                 }
                 resolve(btoa(bin))
             }
-            reader.onerror = () => reject(new Error('falha ao ler o arquivo'))
+            reader.onerror = () => reject(new Error('common.fileReadFailed'))
             reader.readAsArrayBuffer(file)
         })
     }
@@ -111,13 +111,13 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                     inQuotes = !inQuotes
                 }
             } else if (ch === delim && !inQuotes) {
-                out.push(cur.trim() || `Coluna ${out.length + 1}`)
+                out.push(cur.trim() || t('import.columnN', {n: out.length + 1}))
                 cur = ''
             } else {
                 cur += ch
             }
         }
-        out.push(cur.trim() || `Coluna ${out.length + 1}`)
+        out.push(cur.trim() || t('import.columnN', {n: out.length + 1}))
         return out
     }
 
@@ -166,7 +166,7 @@ export function ImportModal({onClose}: {onClose: () => void}) {
         }
     }
     const formatOptions: {value: Format; label: string; hint: string}[] = [
-        {value: 'auto', label: 'CSV (Chrome / Firefox / LastPass / 1Password)', hint: t('import.csvAutoHint')},
+        {value: 'auto', label: t('import.csvAuto'), hint: t('import.csvAutoHint')},
         {value: 'bitwarden', label: t('import.bitwarden'), hint: t('import.bitwardenHint')},
         {value: 'keepass', label: t('import.keepass'), hint: t('import.keepassHint')},
         {value: 'csv', label: t('import.csvGeneric'), hint: t('import.csvGenericHint')},

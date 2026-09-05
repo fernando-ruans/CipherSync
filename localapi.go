@@ -141,22 +141,29 @@ func writeLocalJSON(w http.ResponseWriter, v interface{}) {
 }
 
 // localGetLogins returns URL-matched logins (eTLD+1-ish matching).
+// An empty/unparseable pageURL is rejected: without it we could not scope
+// results to the requesting site and would hand out the whole vault.
 func (a *App) localGetLogins(pageURL string) map[string]interface{} {
 	v := a.currentVault()
 	if v == nil {
 		return map[string]interface{}{"success": false, "error": "database-locked"}
 	}
 	host := extractDomain(pageURL)
+	if host == "" {
+		return map[string]interface{}{"success": false, "error": "missing-url"}
+	}
+	root := domainRoot(host)
 	out := []interface{}{}
 	for _, it := range v.list() {
 		if it.Deleted || it.Type != TypeLogin || it.Password == "" {
 			continue
 		}
-		if host != "" && it.URL != "" {
-			itemHost := extractDomain(it.URL)
-			if !stringsEqualFold(domainRoot(itemHost), domainRoot(host)) {
-				continue
-			}
+		if it.URL == "" {
+			continue
+		}
+		itemHost := extractDomain(it.URL)
+		if itemHost == "" || !stringsEqualFold(domainRoot(itemHost), root) {
+			continue
 		}
 		entry := map[string]interface{}{
 			"id":       it.ID,

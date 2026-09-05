@@ -155,7 +155,7 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                 <Section title={t('settings.theme')}>
                     <ThemePicker/>
                     <div className="mt-3 flex items-center justify-between gap-3">
-                        <span className="text-sm text-soft">Idioma / Language</span>
+                        <span className="text-sm text-soft">{t('settings.language')}</span>
                         <select
                             value={lang}
                             onChange={(e) => setLang(e.target.value as Lang)}
@@ -215,7 +215,7 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                             <Input label={t('settings.confirmNewPw')} type="password" value={confirm} onChange={setConfirm}/>
                             <div className="flex justify-end gap-2">
                                 <Button variant="ghost" onClick={() => setChangePw(false)}>
-                                    Cancelar
+                                    {t('common.cancel')}
                                 </Button>
                                 <Button onClick={() => void changePassword()} disabled={loading}>
                                     {loading ? t('settings.changing') : t('settings.change')}
@@ -255,7 +255,7 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                         label={t('ext.chromeId')}
                         value={chromeExtId}
                         onChange={setChromeExtId}
-                        placeholder="ex: abcdefghijklmnopabcdefghijklmnop"
+                        placeholder={t('ext.chromeIdPh')}
                     />
                     <div className="mt-2 flex gap-2">
                         <Button variant="subtle" className="flex-1" onClick={() => void installHost()}>
@@ -282,7 +282,7 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
 
                 <Section title={t('settings.about')}>
                     <p className="text-sm text-soft">
-                        <span className="font-semibold text-ink">CipherSync</span> v0.4.0 — {t('settings.aboutText')}
+                        <span className="font-semibold text-ink">CipherSync</span> v0.5.0 — {t('settings.aboutText')}
                     </p>
                 </Section>
 
@@ -301,12 +301,12 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                     ) : (
                         <div className="space-y-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
                             <p className="text-xs text-red-300">
-                                {t('settings.deleteConfirm').split('DELETAR TUDO')[0]}<span className="font-bold">DELETAR TUDO</span>{t('settings.deleteConfirm').split('DELETAR TUDO')[1] ?? ''}
+                                {t('settings.deleteConfirm').split(t('settings.deleteGate'))[0]}<span className="font-bold">{t('settings.deleteGate')}</span>{t('settings.deleteConfirm').split(t('settings.deleteGate'))[1] ?? ''}
                             </p>
                             <Input
                                 value={confirmText}
                                 onChange={setConfirmText}
-                                placeholder="DELETAR TUDO"
+                                placeholder={t('settings.deleteGate')}
                                 autoFocus
                             />
                             <div className="flex justify-end gap-2">
@@ -314,11 +314,11 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                                     setConfirmingDelete(false)
                                     setConfirmText('')
                                 }}>
-                                    Cancelar
+                                    {t('common.cancel')}
                                 </Button>
                                 <Button
                                     className="border border-red-500/40 bg-red-500/15 text-red-300 hover:bg-red-500/25"
-                                    disabled={confirmText !== 'DELETAR TUDO' || deleting}
+                                    disabled={confirmText !== t('settings.deleteGate') || deleting}
                                     onClick={() => void doDeleteAccount()}
                                 >
                                     {deleting ? t('settings.deleting') : t('settings.deleteForever')}

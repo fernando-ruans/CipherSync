@@ -90,7 +90,7 @@ function PasskeySection({data, onEdit, onRemove}: {
                 </p>
             )}
             <div className="space-y-2 text-sm">
-                <PasskeyRow label="RP ID" value={data.rpId}/>
+                <PasskeyRow label={t('passkey.rpId')} value={data.rpId}/>
                 {data.rpName && <PasskeyRow label={t('passkey.rpName')} value={data.rpName}/>}
                 {data.username && <PasskeyRow label={t('passkey.username')} value={data.username}/>}
                 <PasskeyRow label={t('passkey.credentialIdLabel')} value={data.credentialId} mono truncate/>
@@ -123,14 +123,17 @@ function PasskeyRow({label, value, mono, truncate, secret}: {
                 <span className={`truncate text-soft ${mono ? 'font-mono text-[13px]' : ''}`} title={truncate ? display : undefined}>
                     {truncate && display.length > 24 ? `${display.slice(0, 12)}…${display.slice(-8)}` : display}
                 </span>
-                <button
-                    type="button"
-                    title={t('common.copy')}
-                    onClick={() => void safeCopy(secret ?? value)}
-                    className="shrink-0 rounded-md p-1 text-mut hover:bg-hover hover:text-ink"
-                >
-                    <Copy size={13}/>
-                </button>
+                {/* private key material is never copied to the clipboard */}
+                {!secret && (
+                    <button
+                        type="button"
+                        title={t('common.copy')}
+                        onClick={() => void safeCopy(display)}
+                        className="shrink-0 rounded-md p-1 text-mut hover:bg-hover hover:text-ink"
+                    >
+                        <Copy size={13}/>
+                    </button>
+                )}
             </span>
         </div>
     )
@@ -211,6 +214,9 @@ export function ItemDetail() {
     }, [])
 
     if (!item || !draft) {
+        // neutralize Ctrl+S so it cannot fire a stale closure targeting an
+        // item that is no longer selected
+        saveRef.current = async () => {}
         return (
             <div className="flex h-full flex-col items-center justify-center text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-input">
@@ -418,7 +424,7 @@ export function ItemDetail() {
                         <PasskeySection
                             data={draft.passkey}
                             onEdit={() => setShowPasskeyModal(true)}
-                            onRemove={undefined}
+                            onRemove={() => set({passkey: undefined})}
                         />
                     ) : (
                         <Button variant="subtle" onClick={() => setShowPasskeyModal(true)}>
@@ -426,7 +432,6 @@ export function ItemDetail() {
                         </Button>
                     )
                 )}
-
                 {(draft.type === 'credit_card' || draft.type === 'identity') && (
                     <div className="grid grid-cols-2 gap-3">
                         {(TYPE_FIELDS[draft.type as keyof typeof TYPE_FIELDS] ?? []).map((f) =>

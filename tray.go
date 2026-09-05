@@ -46,6 +46,9 @@ func runTray(app *App) {
 			}
 		})
 		mQuit.Click(func() {
+			// mark quitting first so OnBeforeClose does not veto the quit
+			// (closeToTray defaults to true and would leave a zombie process)
+			app.setQuitting()
 			systray.Quit()
 			if app.ctx != nil {
 				runtime.Quit(app.ctx)

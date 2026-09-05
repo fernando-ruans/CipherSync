@@ -8,6 +8,8 @@ export function extractDomain(rawUrl: string): string {
 }
 
 import toast from 'react-hot-toast'
+import {getLang} from './langStore'
+import {translate, translateError} from './locales'
 
 export function downloadFile(name: string, content: string, mime = 'text/plain') {
     const blob = new Blob([content], {type: mime})
@@ -22,13 +24,13 @@ export function downloadFile(name: string, content: string, mime = 'text/plain')
 }
 
 // safeCopy never rejects: shows a toast and returns success.
-export async function safeCopy(text: string, label = 'Copiado!'): Promise<boolean> {
+export async function safeCopy(text: string, label?: string): Promise<boolean> {
     try {
         await window.go.main.App.CopyToClipboard(text)
-        toast.success(label)
+        toast.success(label ?? translate(getLang(), 'common.copied'))
         return true
     } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Falha ao copiar')
+        toast.error(e instanceof Error ? translateError(getLang(), e.message) : translate(getLang(), 'common.copyFailed'))
         return false
     }
 }

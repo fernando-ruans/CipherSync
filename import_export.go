@@ -320,10 +320,20 @@ func (v *Vault) importItems(items []Item) ImportResult {
 	defer tx.Rollback()
 	now := time.Now().UnixMilli()
 	var pending []Item
+	// batch accumulates accepted items so duplicate passkeys *within the same
+	// import batch* are also rejected
+	batch := append([]Item{}, v.items...)
 	for _, it := range items {
 		normalizeItem(&it)
 		if it.Type == "" {
 			it.Type = TypeLogin
+		}
+		// same validation as create/update so imports cannot bypass it
+		if it.Passkey != nil {
+			if err := validatePasskey("", it.Passkey, batch); err != nil {
+				res.Errors = append(res.Errors, it.Title+": "+err.Error())
+				continue
+			}
 		}
 		if v.findDuplicate(it) {
 			res.Skipped++
@@ -337,6 +347,7 @@ func (v *Vault) importItems(items []Item) ImportResult {
 			continue
 		}
 		pending = append(pending, it)
+		batch = append(batch, it)
 		res.Created++
 	}
 	if err := tx.Commit(); err != nil {
@@ -377,7 +388,17 @@ func exportCSV(items []Item) string {
 }
 
 func exportJSON(items []Item) (string, error) {
-	b, err := json.MarshalIndent(items, "", "  ")
+	// strip passkey private key material but keep the reference fields
+	sanitized := make([]Item, len(items))
+	for i, it := range items {
+		if it.Passkey != nil {
+			pk := *it.Passkey
+			pk.PrivateKey = ""
+			it.Passkey = &pk
+		}
+		sanitized[i] = it
+	}
+	b, err := json.MarshalIndent(sanitized, "", "  ")
 	if err != nil {
 		return "", err
 	}
@@ -438,6 +459,11 @@ func openTransfer(data, password string) ([]Item, error) {
 	}
 	var pLen uint32
 	if err := binary.Read(r, binary.BigEndian, &pLen); err != nil {
+		return nil, errors.New("invalid transfer file")
+	}
+	// kdfParams JSON is a few hundred bytes; a huge length means a
+	// malformed/hostile file and would otherwise allocate unbounded memory.
+	if pLen > 1<<20 {
 		return nil, errors.New("invalid transfer file")
 	}
 	paramsJSON := make([]byte, pLen)

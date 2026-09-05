@@ -13,7 +13,7 @@ export function setUnsavedItem(id: string | null) {
 }
 
 function confirmDiscard(): boolean {
-    return window.confirm('Você tem alterações não salvas. Descartar?')
+    return window.confirm(translate(useApp.getState().lang, 'discard.confirm'))
 }
 
 interface AppState {
@@ -55,6 +55,7 @@ interface AppState {
     setTrashView: (v: boolean) => void
     loadTrash: () => Promise<void>
     restoreItem: (id: string) => Promise<void>
+    restoreSelected: () => Promise<void>
     purgeSelected: () => Promise<void>
     emptyTrash: () => Promise<void>
     setTrashDays: (days: number) => Promise<void>
@@ -172,6 +173,7 @@ export const useApp = create<AppState>((set, get) => ({
             trashView: false,
             trash: [],
             favicons: {},
+            breachedIds: [],
         })
     },
 
@@ -218,9 +220,11 @@ export const useApp = create<AppState>((set, get) => ({
     },
 
     setSearch: (search) => set({search}),
-    setCategory: (category) => set({category, tag: '', favoritesOnly: false, trashView: false}),
-    setTag: (tag) => set({tag, category: 'all', favoritesOnly: false, trashView: false}),
-    toggleFavoritesOnly: () => set((s) => ({favoritesOnly: !s.favoritesOnly, category: 'all', tag: '', trashView: false})),
+    // switching views/filters drops the batch selection so BatchBar can never
+    // act on items that are no longer visible
+    setCategory: (category) => set({category, tag: '', favoritesOnly: false, trashView: false, multiSelected: []}),
+    setTag: (tag) => set({tag, category: 'all', favoritesOnly: false, trashView: false, multiSelected: []}),
+    toggleFavoritesOnly: () => set((s) => ({favoritesOnly: !s.favoritesOnly, category: 'all', tag: '', trashView: false, multiSelected: []})),
     setTrashView: (trashView) => {
         if (trashView && unsavedItemId && !confirmDiscard()) {
             return
@@ -239,7 +243,20 @@ export const useApp = create<AppState>((set, get) => ({
     restoreItem: async (id) => {
         await api.restoreTrashed(id)
         const [items, trash] = await Promise.all([api.getItems(), api.listTrashed()])
-        set({items, trash, selectedId: id})
+        // only highlight the restored item when the main list is visible
+        set((s) => ({items, trash, selectedId: s.trashView ? null : id}))
+    },
+    restoreSelected: async () => {
+        const ids = [...get().multiSelected]
+        if (ids.length === 0) return
+        await api.restoreTrashedBatch(ids)
+        const [items, trash] = await Promise.all([api.getItems(), api.listTrashed()])
+        set((s) => ({
+            items,
+            trash,
+            multiSelected: [],
+            selectedId: s.trashView ? null : get().selectedId,
+        }))
     },
     purgeSelected: async () => {
         const ids = [...get().multiSelected]
@@ -293,7 +310,8 @@ export const useApp = create<AppState>((set, get) => ({
 
     updateItem: async (item) => {
         await api.updateItem(item)
-        const items = get().items.map((i) => (i.id === item.id ? item : i))
+        // re-sort like the backend does so the list order stays consistent
+        const items = get().items.map((i) => (i.id === item.id ? item : i)).sort((a, b) => a.title.localeCompare(b.title))
         set({items})
     },
 
@@ -322,7 +340,14 @@ export const useApp = create<AppState>((set, get) => ({
 
     refreshItems: async () => {
         const items = await api.getItems()
-        set({items})
+        set((s) => {
+            const ids = new Set(items.map((i) => i.id))
+            return {
+                items,
+                selectedId: s.selectedId && ids.has(s.selectedId) ? s.selectedId : null,
+                multiSelected: s.multiSelected.filter((id) => ids.has(id)),
+            }
+        })
     },
 
     toggleMulti: (id) => {

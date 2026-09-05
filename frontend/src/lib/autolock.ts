@@ -19,8 +19,13 @@ export function useAutoLock(minutes: number) {
             }
         }, 15000)
 
+        // Hidden windows receive no activity events, so elapsed time simply
+        // counts toward the timeout (checked on interval and on return).
+        // Locking instantly on minimize would ignore the configured minutes.
         const onVisibility = () => {
-            if (document.hidden) void lock()
+            if (!document.hidden && Date.now() - lastActivity.current > minutes * 60 * 1000) {
+                void lock()
+            }
         }
         document.addEventListener('visibilitychange', onVisibility)
 

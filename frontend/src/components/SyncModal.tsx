@@ -11,6 +11,7 @@ type Provider = '' | 'local'
 
 export function SyncModal({onClose}: {onClose: () => void}) {
     const t = useT()
+    const lang = useApp((s) => s.lang)
     const refreshItems = useApp((s) => s.refreshItems)
     const loadTrash = useApp((s) => s.loadTrash)
     const [provider, setProvider] = useState<Provider>('')
@@ -18,6 +19,24 @@ export function SyncModal({onClose}: {onClose: () => void}) {
     const [status, setStatus] = useState<SyncStatus | null>(null)
     const [loading, setLoading] = useState(false)
     const [saving, setSaving] = useState(false)
+
+    useEffect(() => {
+        let alive = true
+        void (async () => {
+            try {
+                const [cfg, st] = await Promise.all([api.getSyncConfig(), api.getSyncStatus()])
+                if (!alive) return
+                setProvider((cfg.provider as Provider) || '')
+                setRemote(cfg.remote || '')
+                setStatus(st)
+            } catch {
+                // ignore
+            }
+        })()
+        return () => {
+            alive = false
+        }
+    }, [])
 
     async function load() {
         try {
@@ -29,11 +48,6 @@ export function SyncModal({onClose}: {onClose: () => void}) {
             // ignore
         }
     }
-
-    useEffect(() => {
-        void load()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
 
     async function save() {
         setSaving(true)
@@ -82,6 +96,12 @@ export function SyncModal({onClose}: {onClose: () => void}) {
         : status?.state === 'error' ? 'text-red-400'
         : 'text-faint'
 
+    const stateKey =
+        status?.state === 'ok' ? 'sync.state.ok'
+        : status?.state === 'conflict' ? 'sync.state.conflict'
+        : status?.state === 'error' ? 'sync.state.error'
+        : 'sync.state.idle'
+
     return (
         <Modal title={t('sync.title')} onClose={onClose}>
             <div className="space-y-4">
@@ -115,7 +135,7 @@ export function SyncModal({onClose}: {onClose: () => void}) {
                         label={t('sync.folder')}
                         value={remote}
                         onChange={setRemote}
-                        placeholder="C:\\Users\\voce\\CipherSync, \\\\NAS\\backup, ..."
+                        placeholder={t('sync.folderPh')}
                     />
                 )}
 
@@ -134,7 +154,7 @@ export function SyncModal({onClose}: {onClose: () => void}) {
                     <div className="flex items-center justify-between">
                         <span className="text-sm font-semibold text-ink">{t('sync.status')}</span>
                         <span className={`text-sm font-bold ${stateColor}`}>
-                            {status ? status.state || 'idle' : '—'}
+                            {status ? t(stateKey) : '—'}
                         </span>
                     </div>
                     {status?.detail && <p className="mt-1 text-xs text-mut">{status.detail}</p>}
@@ -145,7 +165,7 @@ export function SyncModal({onClose}: {onClose: () => void}) {
                     )}
                     {status && status.lastSync > 0 && (
                         <p className="mt-1 text-xs text-faint">
-                            {t('sync.lastSync')}: {new Date(status.lastSync).toLocaleString()}
+                            {t('sync.lastSync')}: {new Date(status.lastSync).toLocaleString(lang === 'en' ? 'en-US' : 'pt-BR')}
                         </p>
                     )}
                     <Button className="mt-3 w-full" onClick={() => void syncNow()} disabled={loading || provider === ''}>

@@ -30,6 +30,7 @@ export const api = {
     deleteItems: (ids: string[]): Promise<void> => window.go.main.App.DeleteItems(ids),
     listTrashed: (): Promise<import('./types').Item[]> => window.go.main.App.ListTrashed(),
     restoreTrashed: (id: string): Promise<void> => window.go.main.App.RestoreTrashed(id),
+    restoreTrashedBatch: (ids: string[]): Promise<void> => window.go.main.App.RestoreTrashedBatch(ids),
     purgeTrashed: (ids: string[]): Promise<void> => window.go.main.App.PurgeTrashed(ids),
     setTrashDays: (days: number): Promise<void> => window.go.main.App.SetTrashDays(days),
     addAttachment: (itemId: string, name: string, dataB64: string): Promise<import('./types').Attachment> =>
@@ -100,7 +101,12 @@ export const api = {
 
 export async function errorMessage(e: unknown): Promise<string> {
     const {getLang} = await import('./langStore')
-    const {translateError} = await import('./locales')
+    const {translate, translateError} = await import('./locales')
+    const lang = getLang()
     const raw = e instanceof Error ? e.message : String(e)
-    return translateError(getLang(), raw)
+    // frontend-origin errors may carry a dictionary key directly
+    if (raw.startsWith('common.') || raw.startsWith('import.') || raw.startsWith('sync.')) {
+        return translate(lang, raw)
+    }
+    return translateError(lang, raw)
 }

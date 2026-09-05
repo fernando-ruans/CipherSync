@@ -102,6 +102,8 @@ export function PurgeTrashed(arg1:Array<string>):Promise<void>;
 
 export function RestoreTrashed(arg1:string):Promise<void>;
 
+export function RestoreTrashedBatch(arg1:Array<string>):Promise<void>;
+
 export function RestoreVersion(arg1:string):Promise<main.Item>;
 
 export function SetAutolockMinutes(arg1:number):Promise<void>;

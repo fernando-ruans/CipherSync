@@ -163,7 +163,7 @@ const dict = {
         'passkey.titleEdit': 'Editar passkey',
         'passkey.desc': 'Referência de passkey (inventário). O CipherSync não autentica WebAuthn — faça login pelo fluxo do navegador.',
         'passkey.rpId': 'RP ID (domínio) *',
-        'passkey.rpIdPh': 'github.com',
+        'passkey.rpIdPh': 'Ex: github.com',
         'passkey.rpName': 'Nome do site',
         'passkey.username': 'Nome de usuário',
         'passkey.credentialId': 'Credential ID (base64url) *',
@@ -316,6 +316,27 @@ const dict = {
         'ext.pairing': 'Gerar código de pareamento',
         'ext.pairingDesc': 'Cole este código na página de opções da extensão para parear.',
         'ext.codeCopied': 'Código copiado',
+        'ext.chromeIdPh': 'ex: abcdefghijklmnopabcdefghijklmnop',
+
+        'sync.folderPh': 'C:\\Users\\voce\\CipherSync, \\\\NAS\\backup, ...',
+        'sync.state.ok': 'Em dia',
+        'sync.state.conflict': 'Conflito',
+        'sync.state.error': 'Erro',
+        'sync.state.idle': 'Parado',
+
+        'discard.confirm': 'Você tem alterações não salvas. Descartar?',
+        'common.copyFailed': 'Falha ao copiar',
+        'common.fileReadFailed': 'Falha ao ler o arquivo',
+
+        'settings.language': 'Idioma / Language',
+        'settings.deleteGate': 'DELETAR TUDO',
+
+        'import.columnN': 'Coluna {n}',
+
+        'passkey.credPh': '00000000-...',
+        'passkey.algPh': '-7 (ES256)',
+
+        'export.selectedFile': 'ciphersync-selecionados',
 
         'qa.placeholder': 'Buscar login... (Enter copia a senha)',
         'qa.noResults': 'Nenhum login encontrado.',
@@ -524,7 +545,7 @@ const dict = {
         'passkey.titleEdit': 'Edit passkey',
         'passkey.desc': 'Passkey reference (inventory). CipherSync does not do WebAuthn auth — sign in via the browser flow.',
         'passkey.rpId': 'RP ID (domain) *',
-        'passkey.rpIdPh': 'github.com',
+        'passkey.rpIdPh': 'e.g. github.com',
         'passkey.rpName': 'Site name',
         'passkey.username': 'Username',
         'passkey.credentialId': 'Credential ID (base64url) *',
@@ -663,7 +684,7 @@ const dict = {
         'settings.danger': 'Danger zone',
         'settings.dangerDesc': 'Erases all vaults and data, resetting the app. This cannot be undone.',
         'settings.deleteAccount': 'Delete account and all data',
-        'settings.deleteConfirm': 'To confirm, type DELETAR TUDO below.',
+        'settings.deleteConfirm': 'To confirm, type DELETE EVERYTHING below.',
         'settings.deleting': 'Deleting...',
         'settings.deleteForever': 'Delete permanently',
 
@@ -677,6 +698,27 @@ const dict = {
         'ext.pairing': 'Generate pairing code',
         'ext.pairingDesc': 'Paste this code in the extension options page to pair.',
         'ext.codeCopied': 'Code copied',
+        'ext.chromeIdPh': 'e.g. abcdefghijklmnopabcdefghijklmnop',
+
+        'sync.folderPh': 'C:\\Users\\you\\CipherSync, \\\\NAS\\backup, ...',
+        'sync.state.ok': 'Up to date',
+        'sync.state.conflict': 'Conflict',
+        'sync.state.error': 'Error',
+        'sync.state.idle': 'Idle',
+
+        'discard.confirm': 'You have unsaved changes. Discard?',
+        'common.copyFailed': 'Failed to copy',
+        'common.fileReadFailed': 'Failed to read file',
+
+        'settings.language': 'Idioma / Language',
+        'settings.deleteGate': 'DELETE EVERYTHING',
+
+        'import.columnN': 'Column {n}',
+
+        'passkey.credPh': '00000000-...',
+        'passkey.algPh': '-7 (ES256)',
+
+        'export.selectedFile': 'ciphersync-selected',
 
         'qa.placeholder': 'Search logins... (Enter copies the password)',
         'qa.noResults': 'No logins found.',
@@ -747,28 +789,91 @@ export function useT(): (key: DictKey | string, vars?: Record<string, string | n
     return (key: DictKey | string, vars?: Record<string, string | number>) => translate(lang, key, vars)
 }
 
-// Map known backend (English) errors to translated UI messages.
+type ErrRule = { needles: string[]; pt: string; en: string }
+
+// Known backend/frontend error strings, mapped in both directions so each
+// language always sees its own text (Go mixes EN and PT strings today).
+const errRules: ErrRule[] = [
+    {needles: ['wrong master password'], pt: 'Senha mestra incorreta', en: 'Wrong master password'},
+    {needles: ['vault is locked'], pt: 'Cofre bloqueado', en: 'Vault is locked'},
+    {needles: ['database-locked'], pt: 'Cofre bloqueado', en: 'Vault is locked'},
+    {needles: ['item not found'], pt: 'Item não encontrado', en: 'Item not found'},
+    {needles: ['not a valid', 'vault'], pt: 'Arquivo de cofre inválido', en: 'Invalid vault file'},
+    {needles: ['invalid vault file'], pt: 'Arquivo de cofre inválido', en: 'Invalid vault file'},
+    {needles: ['passwords do not match'], pt: 'As senhas não coincidem', en: 'Passwords do not match'},
+    {needles: ['new passwords do not match'], pt: 'As senhas não coincidem', en: 'Passwords do not match'},
+    {needles: ['at least 8 characters'], pt: 'Use pelo menos 8 caracteres', en: 'Use at least 8 characters'},
+    {needles: ['enter your master password'], pt: 'Digite sua senha mestra', en: 'Enter your master password'},
+    {needles: ['a vault is already unlocked'], pt: 'Já existe um cofre desbloqueado', en: 'A vault is already unlocked'},
+    {needles: ['give the vault a name'], pt: 'Dê um nome ao cofre', en: 'Give the vault a name'},
+    {needles: ['select a vault'], pt: 'Selecione um cofre', en: 'Select a vault'},
+    {needles: ['tag cannot be empty'], pt: 'A tag não pode estar vazia', en: 'Tag cannot be empty'},
+    {needles: ['file too large'], pt: 'Arquivo muito grande (máx. 10 MB)', en: 'File too large (max. 10 MB)'},
+    {needles: ['empty file'], pt: 'Arquivo vazio', en: 'Empty file'},
+    {needles: ['invalid file data'], pt: 'Dados de arquivo inválidos', en: 'Invalid file data'},
+    {needles: ['invalid transfer'], pt: 'Arquivo de transferência inválido', en: 'Invalid transfer file'},
+    {needles: ['unsupported transfer'], pt: 'Versão de transferência não suportada', en: 'Unsupported transfer version'},
+    {needles: ['invalid keepass'], pt: 'Banco KeePass inválido ou senha incorreta', en: 'Invalid KeePass database or wrong password'},
+    {needles: ['vault is encrypted'], pt: 'Exporte o cofre descriptografado primeiro', en: 'Export the decrypted vault first'},
+    // generator
+    {needles: ['length must be greater than zero'], pt: 'O comprimento deve ser maior que zero', en: 'Length must be greater than zero'},
+    {needles: ['length too large'], pt: 'Comprimento muito grande', en: 'Length too large'},
+    {needles: ['at least one character type must be selected'], pt: 'Selecione pelo menos um tipo de caractere', en: 'Select at least one character type'},
+    {needles: ['character pool is empty after exclusions'], pt: 'O conjunto de caracteres ficou vazio após as exclusões', en: 'Character pool is empty after exclusions'},
+    {needles: ['word count must be greater than zero'], pt: 'A quantidade de palavras deve ser maior que zero', en: 'Word count must be greater than zero'},
+    {needles: ['word count too large'], pt: 'Quantidade de palavras muito grande', en: 'Word count too large'},
+    // master password
+    {needles: ['new password must differ'], pt: 'A nova senha deve ser diferente da atual', en: 'The new password must differ from the current one'},
+    // crypto / files
+    {needles: ['ciphertext too short'], pt: 'Dados criptografados inválidos', en: 'Invalid encrypted data'},
+    {needles: ['invalid retention'], pt: 'Retenção inválida', en: 'Invalid retention'},
+    {needles: ['invalid number'], pt: 'Número inválido', en: 'Invalid number'},
+    {needles: ['favicon not found'], pt: 'Favicon não encontrado', en: 'Favicon not found'},
+    // sync
+    {needles: ['pasta de sincronização não configurada'], pt: 'Pasta de sincronização não configurada', en: 'Sync folder not configured'},
+    {needles: ['sincronização não configurada'], pt: 'Sincronização não configurada', en: 'Sync not configured'},
+    {needles: ['provedor desconhecido'], pt: 'Provedor desconhecido', en: 'Unknown provider'},
+    {needles: ['pasta local inválida'], pt: 'Pasta local inválida', en: 'Invalid local folder'},
+    {needles: ['remote:'], pt: 'Erro no cofre remoto', en: 'Remote vault error'},
+    // quick access / hotkeys
+    {needles: ['quick access disponível apenas no windows'], pt: 'Quick access disponível apenas no Windows', en: 'Quick access is only available on Windows'},
+    {needles: ['atalho global já está em uso'], pt: 'Atalho global já está em uso por outro aplicativo', en: 'Global shortcut is already in use by another application'},
+    {needles: ['não foi possível registrar o atalho'], pt: 'Não foi possível registrar o atalho global', en: 'Could not register the global shortcut'},
+    // passkeys
+    {needles: ['dados da passkey ausentes'], pt: 'Dados da passkey ausentes', en: 'Passkey data is missing'},
+    {needles: ['rp id é obrigatório'], pt: 'RP ID é obrigatório (ex: github.com)', en: 'RP ID is required (e.g. github.com)'},
+    {needles: ['rp id inválido'], pt: 'RP ID inválido (use apenas o domínio, ex: github.com)', en: 'Invalid RP ID (use the domain only, e.g. github.com)'},
+    {needles: ['credential id inválido'], pt: 'Credential ID inválido (esperado base64url)', en: 'Invalid credential ID (expected base64url)'},
+    {needles: ['user handle inválido'], pt: 'User handle inválido (esperado base64url)', en: 'Invalid user handle (expected base64url)'},
+    {needles: ['esta passkey já existe'], pt: 'Esta passkey já existe no cofre', en: 'This passkey already exists in the vault'},
+    // TOTP
+    {needles: ['informe a chave secreta'], pt: 'Informe a chave secreta', en: 'Enter the secret key'},
+    {needles: ['chave secreta inválida'], pt: 'Chave secreta inválida', en: 'Invalid secret key'},
+    {needles: ['nada detectado na imagem'], pt: 'Nada detectado na imagem', en: 'Nothing detected in the image'},
+    {needles: ['código qr inválido'], pt: 'Código QR inválido', en: 'Invalid QR code'},
+    {needles: ['qr code não é do tipo otpauth'], pt: 'O QR code não é do tipo otpauth (TOTP)', en: 'The QR code is not otpauth (TOTP) type'},
+    {needles: ['qr code sem campo secret'], pt: 'QR code sem campo secret', en: 'QR code has no secret field'},
+    {needles: ['chave inválida'], pt: 'Chave inválida', en: 'Invalid key'},
+    {needles: ['item sem 2fa configurado'], pt: 'Item sem 2FA configurado', en: 'Item has no 2FA configured'},
+    {needles: ['no totp'], pt: 'Item sem 2FA configurado', en: 'Item has no 2FA configured'},
+    // native host / extension
+    {needles: ['bad code'], pt: 'Código inválido ou expirado', en: 'Invalid or expired code'},
+    {needles: ['not-running'], pt: 'CipherSync não está em execução', en: 'CipherSync is not running'},
+    {needles: ['disponível apenas no windows'], pt: 'Disponível apenas no Windows', en: 'Only available on Windows'},
+    {needles: ['home não encontrado'], pt: 'Pasta home não encontrada', en: 'Home directory not found'},
+    {needles: ['hibp respondeu com status'], pt: 'HIBP respondeu com status', en: 'HIBP responded with status'},
+    // frontend-origin
+    {needles: ['falha ao ler o arquivo'], pt: 'Falha ao ler o arquivo', en: 'Failed to read file'},
+    {needles: ['falha ao copiar'], pt: 'Falha ao copiar', en: 'Failed to copy'},
+]
+
+// Map known backend (EN/PT) errors to the UI language.
 export function translateError(lang: Lang, message: string): string {
     const m = message.toLowerCase()
-    if (lang === 'en') return message
-    if (m.includes('wrong master password')) return 'Senha mestra incorreta'
-    if (m.includes('vault is locked')) return 'Cofre bloqueado'
-    if (m.includes('item not found')) return 'Item não encontrado'
-    if (m.includes('not a valid') && m.includes('vault')) return 'Arquivo de cofre inválido'
-    if (m.includes('passwords do not match') || m.includes('new passwords do not match')) return 'As senhas não coincidem'
-    if (m.includes('at least 8 characters')) return 'Use pelo menos 8 caracteres'
-    if (m.includes('enter your master password')) return 'Digite sua senha mestra'
-    if (m.includes('a vault is already unlocked')) return 'Já existe um cofre desbloqueado'
-    if (m.includes('give the vault a name')) return 'Dê um nome ao cofre'
-    if (m.includes('select a vault')) return 'Selecione um cofre'
-    if (m.includes('invalid vault file')) return 'Arquivo de cofre inválido'
-    if (m.includes('tag cannot be empty')) return 'A tag não pode estar vazia'
-    if (m.includes('file too large')) return 'Arquivo muito grande (máx. 10 MB)'
-    if (m.includes('empty file')) return 'Arquivo vazio'
-    if (m.includes('invalid file data')) return 'Dados de arquivo inválidos'
-    if (m.includes('invalid transfer')) return 'Arquivo de transferência inválido'
-    if (m.includes('unsupported transfer')) return 'Versão de transferência não suportada'
-    if (m.includes('invalid keepass') || m.includes('invalid keepass database')) return 'Banco KeePass inválido ou senha incorreta'
-    if (m.includes('vault is encrypted')) return 'Exporte o cofre descriptografado primeiro'
+    for (const rule of errRules) {
+        if (rule.needles.every((n) => m.includes(n))) {
+            return lang === 'en' ? rule.en : rule.pt
+        }
+    }
     return message
 }

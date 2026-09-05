@@ -24,7 +24,7 @@ import {
     X,
 } from 'lucide-react'
 import {useApp} from '../state'
-import {api} from '../lib/api'
+import {api, errorMessage} from '../lib/api'
 import {useT, translate} from '../lib/locales'
 import {Button, IconButton, Modal, RevealInput, Input} from './ui'
 import {ItemDetail} from './ItemDetail'
@@ -275,13 +275,13 @@ function BatchBar({count}: {count: number}) {
         try {
             const content = kind === 'csv' ? await api.exportSelectedCSV(ids) : await api.exportSelectedJSON(ids)
             downloadFile(
-                kind === 'csv' ? 'ciphersync-selecionados.csv' : 'ciphersync-selecionados.json',
+                `${t('export.selectedFile')}.${kind}`,
                 content,
                 kind === 'csv' ? 'text/csv' : 'application/json',
             )
             toast.success(t('export.selectedDone'))
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : String(err))
+            toast.error(await errorMessage(err))
         }
     }
 
@@ -583,6 +583,7 @@ function TrashView() {
     const trash = useApp((s) => s.trash)
     const loadTrash = useApp((s) => s.loadTrash)
     const restoreItem = useApp((s) => s.restoreItem)
+    const restoreSelected = useApp((s) => s.restoreSelected)
     const purgeSelected = useApp((s) => s.purgeSelected)
     const emptyTrash = useApp((s) => s.emptyTrash)
     const multiSelected = useApp((s) => s.multiSelected)
@@ -603,7 +604,7 @@ function TrashView() {
             await purgeSelected()
             toast.success(t('trash.purged'))
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : String(err))
+            toast.error(await errorMessage(err))
         }
     }
 
@@ -614,7 +615,7 @@ function TrashView() {
             await emptyTrash()
             toast.success(t('trash.emptied'))
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : String(err))
+            toast.error(await errorMessage(err))
         }
     }
 
@@ -623,7 +624,17 @@ function TrashView() {
             await restoreItem(id)
             toast.success(t('trash.restored'))
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : String(err))
+            toast.error(await errorMessage(err))
+        }
+    }
+
+    async function doRestoreSelected() {
+        if (multiSelected.length === 0) return
+        try {
+            await restoreSelected()
+            toast.success(t('trash.restored'))
+        } catch (err) {
+            toast.error(await errorMessage(err))
         }
     }
 
@@ -651,15 +662,7 @@ function TrashView() {
                 <div className="flex items-center gap-1.5 border-b border-edge bg-surface px-3 py-2">
                     <span className="mr-1 text-xs font-semibold text-accent">{multiSelected.length}</span>
                     <button
-                        onClick={() => {
-                            const ids = [...multiSelected]
-                            clearMulti()
-                            void (async () => {
-                                for (const id of ids) {
-                                    await restoreItem(id).catch(() => undefined)
-                                }
-                            })()
-                        }}
+                        onClick={() => void doRestoreSelected()}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-input px-2.5 py-1.5 text-xs font-medium text-soft hover:bg-hover hover:text-ink"
                     >
                         <Undo2 size={13}/> {t('common.restore')}

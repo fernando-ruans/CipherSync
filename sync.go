@@ -122,6 +122,12 @@ type SyncEngine struct {
 	mu       sync.Mutex
 	provider SyncProvider
 	remote   string
+	// snapshot returns a consistent copy of the live local DB (VACUUM INTO).
+	// Falls back to a plain copy when unset.
+	snapshot func() (string, error)
+	// preSwap runs just before the local file is replaced on pull (e.g.
+	// close the vault so Windows allows the swap).
+	preSwap func() error
 }
 
 func (e *SyncEngine) syncFile(localPath string, loadState func() (syncState, error), saveState func(syncState) error, reload func() error) (string, error) {
@@ -148,12 +154,21 @@ func (e *SyncEngine) syncFile(localPath string, loadState func() (syncState, err
 	// rev is only compared when both sides report one (Drive); otherwise mtime rules
 	revChanged := st.RemoteRev != "" && remote.Rev != "" && remote.Rev != st.RemoteRev
 	remoteChanged := remote.Exists && (st.RemoteMtime == 0 || remote.ModTime != st.RemoteMtime || revChanged)
-
-	// verify content actually differs when mtimes suggest change (clock skew safety)
-	if localChanged && st.LocalMtime != 0 {
-		// mtime differs; treat as changed (hash check happens on upload anyway)
-	}
 	now := time.Now().UnixMilli()
+
+	// Fresh state (first run or reset sidecar): don't blindly declare a
+	// conflict when both sides "changed". Compare content instead; only
+	// fall through to the both-changed branch when they truly differ.
+	if localChanged && remoteChanged && st.LocalMtime == 0 && st.RemoteMtime == 0 {
+		same, herr := e.remoteMatches(localPath)
+		if herr != nil {
+			return "", herr
+		}
+		if same {
+			_ = saveState(syncState{RemoteRev: remote.Rev, RemoteMtime: remote.ModTime, RemoteSize: remote.Size, LocalMtime: localMtime, LastSync: now})
+			return "up to date", nil
+		}
+	}
 
 	switch {
 	case !remote.Exists:
@@ -192,10 +207,13 @@ func (e *SyncEngine) syncFile(localPath string, loadState func() (syncState, err
 		return "downloaded", nil
 
 	default:
-		// both changed: keep newer by mtime, stash loser as conflict copy
+		// both changed: keep newer by mtime, stash loser as conflict copy.
+		// Stashes are hard failures — proceeding would silently lose data.
 		if remote.ModTime > localMtime {
 			conflictPath := conflictName(localPath)
-			_ = copyFile(localPath, conflictPath)
+			if err := copyFile(localPath, conflictPath); err != nil {
+				return "", fmt.Errorf("conflict stash: %w", err)
+			}
 			if err := e.pull(localPath); err != nil {
 				return "", err
 			}
@@ -208,7 +226,9 @@ func (e *SyncEngine) syncFile(localPath string, loadState func() (syncState, err
 		}
 		conflictPath := conflictName(localPath)
 		// stash remote loser next to the local file for visibility
-		_ = e.pull(conflictPath)
+		if err := e.pull(conflictPath); err != nil {
+			return "", fmt.Errorf("conflict stash: %w", err)
+		}
 		rev, err := e.push(localPath)
 		if err != nil {
 			return "", err
@@ -219,9 +239,19 @@ func (e *SyncEngine) syncFile(localPath string, loadState func() (syncState, err
 }
 
 func (e *SyncEngine) push(localPath string) (string, error) {
-	tmp, err := snapshotVaultFile(localPath)
-	if err != nil {
-		return "", err
+	tmp := ""
+	if e.snapshot != nil {
+		t, err := e.snapshot()
+		if err != nil {
+			return "", err
+		}
+		tmp = t
+	} else {
+		t, err := snapshotVaultFile(localPath)
+		if err != nil {
+			return "", err
+		}
+		tmp = t
 	}
 	defer os.Remove(tmp)
 	return e.provider.Upload(tmp, e.remote)
@@ -237,7 +267,35 @@ func (e *SyncEngine) pull(localPath string) error {
 	if err := verifyVaultFile(tmp); err != nil {
 		return err
 	}
+	if e.preSwap != nil {
+		if err := e.preSwap(); err != nil {
+			return err
+		}
+	}
 	return atomicReplace(tmp, localPath)
+}
+
+// remoteMatches downloads the remote file and compares content hashes.
+// Used when the sync state is fresh/absent so an unchanged pair does not
+// degrade into a false conflict.
+func (e *SyncEngine) remoteMatches(localPath string) (bool, error) {
+	tmp := localPath + ".synccmp"
+	defer os.Remove(tmp)
+	if err := e.provider.Download(e.remote, tmp); err != nil {
+		return false, err
+	}
+	if err := verifyVaultFile(tmp); err != nil {
+		return false, err
+	}
+	localHash, err := fileHash(localPath)
+	if err != nil {
+		return false, err
+	}
+	remoteHash, err := fileHash(tmp)
+	if err != nil {
+		return false, err
+	}
+	return localHash == remoteHash, nil
 }
 
 // snapshotVaultFile copies the live DB consistently. For SQLite files opened
@@ -294,7 +352,7 @@ func atomicReplace(tmp, dest string) error {
 func conflictName(localPath string) string {
 	ext := filepath.Ext(localPath)
 	base := strings.TrimSuffix(localPath, ext)
-	stamp := time.Now().Format("20060102-150405")
+	stamp := time.Now().Format("20060102-150405.000") // ms precision avoids same-second collisions
 	host, _ := os.Hostname()
 	if host == "" {
 		host = "device"
@@ -306,5 +364,9 @@ func conflictName(localPath string) string {
 		}
 		return -1
 	}, host)
-	return fmt.Sprintf("%s (conflict %s, %s)%s", base, stamp, host, ext)
+	candidate := fmt.Sprintf("%s (conflict %s, %s)%s", base, stamp, host, ext)
+	for i := 2; fileExists(candidate); i++ {
+		candidate = fmt.Sprintf("%s (conflict %s, %s, %d)%s", base, stamp, host, i, ext)
+	}
+	return candidate
 }

@@ -117,6 +117,7 @@ export function RevealInput({
     onChange: (v: string) => void
     placeholder?: string
 }) {
+    const t = useT()
     const [revealed, setRevealed] = useState(false)
     return (
         <div>
@@ -132,7 +133,7 @@ export function RevealInput({
                 <button
                     type="button"
                     onClick={() => setRevealed(!revealed)}
-                    title={revealed ? 'Ocultar' : 'Mostrar'}
+                    title={revealed ? t('common.hide') : t('common.show')}
                     className="flex h-auto w-10 shrink-0 items-center justify-center rounded-lg border border-edge bg-input text-mut hover:text-ink"
                 >
                     {revealed ? <EyeOff size={16}/> : <Eye size={16}/>}

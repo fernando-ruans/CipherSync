@@ -17,10 +17,12 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 ## Sumário
 
 - [Recursos](#recursos)
+- [Extensão de navegador — passo a passo](#extensão-de-navegador--passo-a-passo)
 - [Segurança](#segurança)
 - [Arquitetura](#arquitetura)
 - [Onde os dados ficam](#onde-os-dados-ficam)
 - [Importação / Exportação](#importação--exportação)
+- [Sincronização](#sincronização)
 - [Atalhos de teclado](#atalhos-de-teclado)
 - [Build](#build)
 - [Estrutura do projeto](#estrutura-do-projeto)
@@ -33,7 +35,7 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 ## Recursos
 
 ### Gerenciamento de itens
-- **4 tipos de item**: Login, Nota segura, Cartão de crédito e Identidade (campos dinâmicos por tipo).
+- **5 tipos de item**: Login, Nota segura, Cartão de crédito, Identidade e **Passkey** (inventário FIDO2).
 - CRUD completo, busca em tempo real (título, usuário, URL, notas, tags e campos), favoritos, categorias e **tags** com autocomplete.
 - **Histórico de versões**: snapshot a cada alteração (até 50 por item), diff visual e restauração.
 - **Lixeira**: exclusões vão para a lixeira (restaurar ou purgar), com retenção configurável e limpeza automática.
@@ -56,11 +58,46 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 - **Idiomas** — Português (BR) e English, com seletor em Configurações.
 - **Sincronização** — pasta local/NAS, com cópias de conflito automáticas.
 - **Extensão de navegador** — Chrome/Firefox via host nativo (preenchimento, TOTP, pareamento).
-- **Auto-lock** configurável (1/5/15/30/60 min ou nunca) e bloqueio ao minimizar a janela.
+- **Auto-lock** configurável (1/5/15/30/60 min ou nunca) — o tempo conta mesmo com a janela oculta.
 - **Temas** Dark / Light / Sistema com persistência.
 - **Importação** de Chrome, Firefox, Edge, LastPass, 1Password, Bitwarden e KeePass (.kdbx).
 - **Exportação** em CSV, JSON e transferência criptografada `.passapp` entre instâncias do CipherSync.
 - **Exclusão de conta** com confirmação por digitação (`DELETAR TUDO`).
+
+---
+
+## Extensão de navegador — passo a passo
+
+A extensão (Chrome/Edge/Firefox, pasta `extension/`) conversa com o app via **host nativo**. Tudo roda em loopback com token efêmero — nada é exposto na rede.
+
+### 1. Carregue a extensão no navegador
+
+1. Abra `chrome://extensions` (ou `about:debugging#/runtime/this-firefox` no Firefox).
+2. Ative **Modo do desenvolvedor**.
+3. Clique em **Carregar sem compactação** e selecione a pasta `extension/` do projeto.
+4. Copie o **ID da extensão** exibido no cartão da extensão.
+
+### 2. Instale o host nativo no CipherSync
+
+1. Abra o CipherSync e desbloqueie o cofre.
+2. Vá em **Configurações → Extensão do navegador**.
+3. Cole o **ID da extensão** copiado no passo 1.
+4. Clique em **Instalar host nativo** (registra o manifest do `CipherSync.exe --native-host` para o seu usuário).
+
+### 3. Pareie a extensão com o app
+
+1. Ainda em **Configurações → Extensão**, clique em **Gerar código de pareamento** (o código expira em 10 minutos).
+2. No navegador, abra **Opções** da extensão (botão direito no ícone → Opções).
+3. Cole o código e clique em **Parear**. A extensão guarda um ID de associação local.
+
+### 4. Use
+
+- Em uma página de login, clique no **ícone da extensão**: ela busca no cofre os logins do mesmo domínio (eTLD+1) e permite copiar usuário/senha/TOTP ou preencher o formulário.
+- Ao criar uma senha em um site novo, a extensão oferece **salvar no CipherSync** (cria ou atualiza o login).
+- O cofre **precisa estar desbloqueado**; bloqueado, a extensão avisa e não acessa nada.
+- **Desinstalar o host**: botão **Remover host nativo** na mesma tela de configurações.
+
+> A comunicação usa um token aleatório gravado em `%APPDATA%\LockSync\.localapi.json` (só loopback, permissão 0600) e códigos de pareamento de uso único — regeneráveis a qualquer momento.
 
 ---
 
@@ -101,7 +138,7 @@ Chave do cofre (vault key) ──► criptografa cada item individualmente
 │               │            ┌─────┼────────┐   │
 │         ┌─────▼────┐  ┌────▼────┐  ┌────▼─┐  │
 │         │  Crypto  │  │  Vault  │  │ Sync │  │
-│         │  Engine  │  │ (SQLite)│  │ (fut.)│  │
+│         │  Engine  │  │ (SQLite)│  │      │  │
 │         └──────────┘  └─────────┘  └──────┘  │
 └───────────────────────────────────────────────┘
 ```
@@ -125,12 +162,16 @@ Chave do cofre (vault key) ──► criptografa cada item individualmente
 
 Os cofres ficam no diretório de configuração do usuário:
 
-- **Windows**: `%APPDATA%\CipherSync\`
-- **Linux**: `~/.config/CipherSync/`
+- **Windows**: `%APPDATA%\LockSync\`
+- **Linux**: `~/.config/LockSync/`
+
+> ℹ️ O nome de pasta `LockSync` é mantido por compatibilidade com instalações anteriores ao rebranding — nada muda para quem já usava o app.
 
 ```
-CipherSync/
+LockSync/
 ├── pessoal.passapp        # cofre criptografado (SQLite)
+├── pessoal.sync.json      # estado de sincronização (se configurada)
+├── backups/               # snapshots diários (10 mais recentes)
 └── trabalho.passapp       # múltiplos cofres suportados
 ```
 
@@ -153,7 +194,21 @@ O import é feito pelo menu **Importar** na sidebar:
 | KeePass (.kdbx v3/v4) | Com senha do banco | Login |
 | Transferência CipherSync (`.passapp`) | Criptografada | Todos |
 
-O export gera **CSV**, **JSON** (com aviso de segurança) ou **transferência criptografada** com senha.
+O export gera **CSV**, **JSON** (com aviso de segurança; o material privado de passkeys nunca é incluído) ou **transferência criptografada** com senha.
+
+---
+
+## Sincronização
+
+O sync é **arquivo-inteiro com LWW (last-write-wins)** e cópias de conflito:
+
+1. Configure em **Configurações → Sincronização** uma pasta local/NAS (ex.: pasta do Dropbox/Syncthing/pendrive).
+2. A cada alteração relevante (e a cada 60 s em segundo plano) o app faz um snapshot consistente do cofre (`VACUUM INTO`) e envia para a pasta remota.
+3. Se ambos os lados mudaram, o mais novo vence e o **perdedor é preservado** como `meuCofre (conflict data, máquina).passapp` — nada é perdido silenciosamente.
+4. Estados corrompidos de sync são reavaliados por **comparação de conteúdo** (hash), evitando conflitos falsos.
+5. Desconectar o sync não apaga nada — só para a sincronização.
+
+> Snapshots do sync ficam em `<cofre>.sync.json` ao lado do cofre (não dentro do banco).
 
 ---
 
@@ -161,6 +216,7 @@ O export gera **CSV**, **JSON** (com aviso de segurança) ou **transferência cr
 
 | Atalho | Ação |
 |--------|------|
+| `Ctrl+Shift+Space` | Quick Access global (busca + copiar senha de qualquer app) |
 | `Ctrl+N` | Novo item |
 | `Ctrl+F` | Focar na busca |
 | `Ctrl+S` | Salvar item em edição |
@@ -172,7 +228,6 @@ O export gera **CSV**, **JSON** (com aviso de segurança) ou **transferência cr
 | `Ctrl+Shift` + clique | Seleção em intervalo |
 | `Ctrl+clique` | Selecionar item individual |
 | `Ctrl+L` | Bloquear o cofre |
-| `Esc` | Fechar modal / limpar seleção |
 | `Esc` | Fechar modal / limpar seleção |
 
 ---
@@ -223,15 +278,23 @@ Para regenerar os ícones a partir de `ciphersync-logo.png`:
 ├── totp.go               # TOTP/2FA
 ├── watchtower.go         # análise de saúde + HIBP
 ├── import_export.go      # import/export + transferência criptografada
+├── passkey.go            # validação de credenciais FIDO2 (inventário)
 ├── generator.go          # gerador de senhas/frases
 ├── wordlist.go           # wordlist para frases
 ├── favicon.go            # fetch de favicons com cache
+├── sync.go / sync_local.go  # engine de sincronização (LWW + conflitos)
+├── tray.go               # system tray
+├── hotkey_windows.go     # atalho global Ctrl+Shift+Space
+├── localapi.go           # API loopback (token) usada pela extensão
+├── nativehost.go         # host nativo de messaging (stdin/stdout)
+├── nativeinstall*.go     # instalação dos manifests por navegador/OS
 ├── main.go               # entrada do app
 ├── frontend/
 │   └── src/
 │       ├── components/   # UI (ItemDetail, Watchtower, TOTP, modais...)
-│       ├── lib/          # api, types, theme, autolock
+│       ├── lib/          # api, types, i18n, theme, autolock
 │       └── state.ts      # store Zustand
+├── extension/            # extensão Chrome/Firefox (MV3)
 ├── testdata/             # arquivos de teste para import
 ├── make_icon.ps1         # gera ícones a partir da logo
 └── wails.json            # configuração do Wails
@@ -245,7 +308,7 @@ Para regenerar os ícones a partir de `ciphersync-logo.png`:
 go test ./...
 ```
 
-Os testes cobrem: ciclo de vida do cofre, troca de senha mestra, migração de schema, batch operations, lixeira (trash/restore/purge/retenção), anexos, backup, múltiplos cofres, import/export (CSV, Bitwarden, KeePass, transferência), TOTP/QR e análise do Watchtower.
+Os testes cobrem: ciclo de vida do cofre, troca de senha mestra, reabertura por chave (reload pós-sync), migração de schema, batch operations, lixeira (trash/restore/purge em lote/retenção), anexos, backup + pruning, múltiplos cofres, import/export (CSV, Bitwarden, transferência), validação de passkeys, export JSON sem material privado, transfer com payload malicioso, TOTP (bindings + URI + QR), API local da extensão (scoping por domínio, upsert, auth), pareamento com expiração/GC, sync fim-a-fim (upload/download/conflito/rollback) e análise do Watchtower.
 
 Arquivos de teste de import em `testdata/`:
 - `1password_export.csv` — 50 cadastros no formato do 1Password
@@ -256,10 +319,18 @@ Arquivos de teste de import em `testdata/`:
 
 ## Roadmap
 
-- **Fase 5** — Acesso: system tray, quick access global (Ctrl+Shift+Espaço), passkeys (inventário), i18n EN + PT-BR
-- **Fase 6** — Sincronização: engine + pasta local/NAS, com resolução de conflitos
-- **Fase 7** — Extensão de navegador (Chrome/Firefox) via host nativo
-- **Futuro** — Campos customizados, travel mode, emergency kit, compartilhamento, CI/CD
+**Concluído:**
+- ✅ Fases 1–4 — cofre criptografado, tipos de item, versionamento, lixeira, anexos, backups, import/export, TOTP, Watchtower/HIBP, multi-cofres, rebranding
+- ✅ Fase 5 — system tray, Quick Access global, passkeys (inventário), i18n (PT-BR/EN)
+- ✅ Fase 6 — sincronização por pasta local/NAS com resolução de conflitos
+- ✅ Fase 7 — extensão de navegador via host nativo (Chrome/Firefox)
+
+**Futuro:**
+- Campos customizados por item
+- Travel mode e emergency kit
+- Autenticação WebAuthn de verdade (passkeys Scope B)
+- Compartilhamento de cofres
+- CI/CD com builds assinados
 
 ---
 

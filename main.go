@@ -46,7 +46,11 @@ func main() {
 		// X button: hide to tray (if enabled in settings) instead of quitting.
 		// The tray menu always offers Sair to really quit.
 		OnBeforeClose: func(ctx context.Context) bool {
+			if app.isQuitting() {
+				return false
+			}
 			if app.closeToTray() {
+				app.resetQuickAccessState()
 				runtime.WindowHide(ctx)
 				return true
 			}
@@ -55,6 +59,7 @@ func main() {
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "ciphersync-single-instance",
 			OnSecondInstanceLaunch: func(_ options.SecondInstanceData) {
+				runtime.WindowUnminimise(app.ctx)
 				runtime.WindowShow(app.ctx)
 			},
 		},

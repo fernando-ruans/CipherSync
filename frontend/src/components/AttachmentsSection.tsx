@@ -45,7 +45,7 @@ export function AttachmentsSection({itemId}: {itemId: string}) {
                 }
                 resolve(btoa(bin))
             }
-            reader.onerror = () => reject(new Error('falha ao ler o arquivo'))
+            reader.onerror = () => reject(new Error('common.fileReadFailed'))
             reader.readAsArrayBuffer(file)
         })
     }

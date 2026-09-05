@@ -55,16 +55,22 @@ export function VersionHistoryModal({itemId, onClose}: {itemId: string; onClose:
     const restoreVersion = useApp((s) => s.restoreVersion)
 
     useEffect(() => {
+        let alive = true
         void (async () => {
             try {
                 const v = await api.getItemVersions(itemId)
+                if (!alive) return
                 setVersions(v)
                 if (v.length > 0) setSelected(v[0])
             } catch (err) {
+                if (!alive) return
                 toast.error(await errorMessage(err))
                 onClose()
             }
         })()
+        return () => {
+            alive = false
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [itemId])
 
