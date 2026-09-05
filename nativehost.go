@@ -246,7 +246,13 @@ func pairingsLoad() map[string]string {
 
 func pairingsSave(m map[string]string) {
 	raw, _ := json.Marshal(m)
-	_ = os.WriteFile(pairingsPath(), raw, 0o600)
+	// write-temp + rename keeps concurrent host/GUI readers from seeing a
+	// torn file (cross-process locking is otherwise out of scope)
+	tmp := pairingsPath() + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, pairingsPath())
 }
 
 // gcPairings drops expired pending codes so the store does not grow forever.

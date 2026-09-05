@@ -1220,6 +1220,10 @@ func parseIntDefault(s string, def int) (int, error) {
 			return def, errors.New("invalid number")
 		}
 		n = n*10 + int(c-'0')
+		// absurd values are treated as invalid, not silently overflowed
+		if n > 1_000_000 {
+			return def, errors.New("invalid number")
+		}
 	}
 	return n, nil
 }

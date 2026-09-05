@@ -65,7 +65,15 @@ export function QuickAccess() {
     async function choose(id: string) {
         const item = items.find((i) => i.id === id)
         if (!item) return
-        await safeCopy(item.password, t('qa.copied'))
+        // passkey-only items have no password: fall back to the username
+        if (item.password) {
+            await safeCopy(item.password, t('qa.copied'))
+        } else if (item.username) {
+            await safeCopy(item.username, t('common.copied'))
+        } else {
+            await close()
+            return
+        }
         await close()
     }
 

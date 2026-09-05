@@ -196,37 +196,46 @@ func (e *SyncEngine) syncFile(localPath string, loadState func() (syncState, err
 		return "uploaded", nil
 
 	case !localChanged && remoteChanged:
-		if err := e.pull(localPath); err != nil {
+		if err := e.pull(localPath, true); err != nil {
 			return "", err
 		}
 		if err := reload(); err != nil {
 			return "", err
 		}
-		after, _ := os.Stat(localPath)
+		after, statErr := os.Stat(localPath)
+		if statErr != nil {
+			return "", statErr
+		}
 		_ = saveState(syncState{RemoteRev: remote.Rev, RemoteMtime: remote.ModTime, RemoteSize: remote.Size, LocalMtime: after.ModTime().UnixMilli(), LastSync: now})
 		return "downloaded", nil
 
 	default:
 		// both changed: keep newer by mtime, stash loser as conflict copy.
 		// Stashes are hard failures — proceeding would silently lose data.
+		// The local loser is stashed via the consistent snapshot (never a
+		// plain copy of the live DB).
 		if remote.ModTime > localMtime {
 			conflictPath := conflictName(localPath)
-			if err := copyFile(localPath, conflictPath); err != nil {
+			if err := e.stashLocal(localPath, conflictPath); err != nil {
 				return "", fmt.Errorf("conflict stash: %w", err)
 			}
-			if err := e.pull(localPath); err != nil {
+			if err := e.pull(localPath, true); err != nil {
 				return "", err
 			}
 			if err := reload(); err != nil {
 				return "", err
 			}
-			after, _ := os.Stat(localPath)
+			after, statErr := os.Stat(localPath)
+			if statErr != nil {
+				return "", statErr
+			}
 			_ = saveState(syncState{RemoteRev: remote.Rev, RemoteMtime: remote.ModTime, RemoteSize: remote.Size, LocalMtime: after.ModTime().UnixMilli(), LastSync: now})
 			return "conflict: kept remote", nil
 		}
 		conflictPath := conflictName(localPath)
-		// stash remote loser next to the local file for visibility
-		if err := e.pull(conflictPath); err != nil {
+		// stash remote loser next to the local file for visibility.
+		// swap=false: preSwap (vault close) must NOT run for a stash.
+		if err := e.pull(conflictPath, false); err != nil {
 			return "", fmt.Errorf("conflict stash: %w", err)
 		}
 		rev, err := e.push(localPath)
@@ -257,8 +266,12 @@ func (e *SyncEngine) push(localPath string) (string, error) {
 	return e.provider.Upload(tmp, e.remote)
 }
 
-func (e *SyncEngine) pull(localPath string) error {
-	tmp := localPath + ".synctmp"
+// pull downloads the remote to a temp file and swaps it over dest.
+// swap=true runs preSwap first (closes the vault so Windows allows the
+// replace); swap=false is used for conflict stashes, where the live vault
+// must stay untouched.
+func (e *SyncEngine) pull(dest string, swap bool) error {
+	tmp := dest + ".synctmp"
 	defer os.Remove(tmp)
 	if err := e.provider.Download(e.remote, tmp); err != nil {
 		return err
@@ -267,12 +280,26 @@ func (e *SyncEngine) pull(localPath string) error {
 	if err := verifyVaultFile(tmp); err != nil {
 		return err
 	}
-	if e.preSwap != nil {
+	if swap && e.preSwap != nil {
 		if err := e.preSwap(); err != nil {
 			return err
 		}
 	}
-	return atomicReplace(tmp, localPath)
+	return atomicReplace(tmp, dest)
+}
+
+// stashLocal writes a consistent copy of the live local DB to dest (used for
+// conflict losers — a plain copy could catch a mid-write SQLite state).
+func (e *SyncEngine) stashLocal(localPath, dest string) error {
+	if e.snapshot != nil {
+		tmp, err := e.snapshot()
+		if err != nil {
+			return err
+		}
+		defer os.Remove(tmp)
+		return copyFile(tmp, dest)
+	}
+	return copyFile(localPath, dest)
 }
 
 // remoteMatches downloads the remote file and compares content hashes.

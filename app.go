@@ -35,6 +35,7 @@ type App struct {
 	qaPrevH    int
 	qaHotkey   bool
 	qaThreadID uint32
+	qaDone     <-chan struct{}
 	syncMu     sync.Mutex
 	syncStatus SyncStatus
 	syncRun    sync.Mutex
@@ -181,8 +182,11 @@ func (a *App) SyncNow() (string, error) {
 	}
 	localPath := filepath.Join(a.VaultDir(), file)
 
-	// copy the key for a possible reload after download-swap (always wiped)
+	// copy the key for a possible reload after download-swap (always wiped).
+	// Guarded by the vault mutex: Lock() wipes the key concurrently.
+	v.mu.RLock()
 	key := append([]byte{}, v.vaultKey...)
+	v.mu.RUnlock()
 	defer wipe(key)
 
 	backupPath := localPath + ".presync.bak"
@@ -222,11 +226,12 @@ func (a *App) SyncNow() (string, error) {
 		return copyFile(localPath, backupPath)
 	}
 	reload := func() error {
-		if err := a.reloadVaultAfterSync(file, key); err != nil {
+		// each call gets a fresh key copy: reloadVaultAfterSync wipes its arg
+		if err := a.reloadVaultAfterSync(file, append([]byte{}, key...)); err != nil {
 			// swap produced an unusable vault: restore previous file and retry
 			if rb, statErr := os.Stat(backupPath); statErr == nil && rb.Size() > 0 {
 				_ = copyFile(backupPath, localPath)
-				if err2 := a.reloadVaultAfterSync(file, key); err2 == nil {
+				if err2 := a.reloadVaultAfterSync(file, append([]byte{}, key...)); err2 == nil {
 					return nil
 				}
 			}
@@ -239,6 +244,24 @@ func (a *App) SyncNow() (string, error) {
 		func(s syncState) error { return saveSyncState(localPath, s) },
 		reload,
 	)
+	if err != nil {
+		// preSwap may have closed the vault without a reload (e.g. the swap
+		// or the backup copy failed): restore from the backup and reopen so
+		// the session is never left half-locked
+		a.vaultMu.RLock()
+		orphaned := a.vault == nil && a.vaultFile == file
+		a.vaultMu.RUnlock()
+		if orphaned {
+			if rb, statErr := os.Stat(backupPath); statErr == nil && rb.Size() > 0 {
+				_ = copyFile(backupPath, localPath)
+			}
+			if rerr := a.reloadVaultAfterSync(file, append([]byte{}, key...)); rerr != nil {
+				// unrecoverable: finish the lock the user expects
+				a.stopLocalAPI()
+				a.resetQuickAccessState()
+			}
+		}
+	}
 	status := SyncStatus{Configured: true, Provider: provider.Name(), Remote: syncFolder, State: "ok", LastSync: time.Now().UnixMilli()}
 	if err != nil {
 		status.State = "error"
@@ -259,10 +282,16 @@ func (a *App) SyncNow() (string, error) {
 }
 
 // reloadVaultAfterSync reopens the swapped vault file with the in-memory key.
+// A fresh key copy must be passed in: the copy is wiped on return.
 func (a *App) reloadVaultAfterSync(file string, key []byte) error {
 	defer wipe(key)
 	a.vaultMu.Lock()
 	defer a.vaultMu.Unlock()
+	if a.vault == nil && a.vaultFile != file {
+		// the vault was locked (or switched) while the sync was running:
+		// do NOT resurrect it behind the user's back
+		return nil
+	}
 	if a.vault != nil {
 		a.vault.close()
 	}
@@ -272,6 +301,13 @@ func (a *App) reloadVaultAfterSync(file string, key []byte) error {
 		return err
 	}
 	a.vault = v
+	a.vaultFile = file
+	if a.vaultName == "" {
+		// recover the display name after a rollback from a failed reload
+		if name, nerr := readVaultName(v.path); nerr == nil {
+			a.vaultName = name
+		}
+	}
 	return nil
 }
 
@@ -304,7 +340,7 @@ func (a *App) enableQuickAccessHotkey() error {
 	if a.qaHotkey {
 		return nil
 	}
-	tid, err := startQuickAccessHotkey(func() {
+	tid, done, err := startQuickAccessHotkey(func() {
 		a.openQuickAccess()
 	})
 	if err != nil {
@@ -312,19 +348,22 @@ func (a *App) enableQuickAccessHotkey() error {
 	}
 	a.qaHotkey = true
 	a.qaThreadID = tid
+	a.qaDone = done
 	return nil
 }
 
 // disableQuickAccessHotkey stops the pump thread and unregisters the
 // hotkey (unregister happens on the registering thread inside the pump).
+// Waits for the pump to exit so a rapid toggle cannot race registration.
 // Caller must hold qaMu.
 func (a *App) disableQuickAccessHotkey() {
 	if !a.qaHotkey {
 		return
 	}
-	stopQuickAccessHotkey(a.qaThreadID)
+	stopQuickAccessHotkey(a.qaThreadID, a.qaDone)
 	a.qaHotkey = false
 	a.qaThreadID = 0
+	a.qaDone = nil
 }
 
 // SetQuickAccess enables/disables the global Ctrl+Shift+Space popup.

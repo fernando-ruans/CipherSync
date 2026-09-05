@@ -218,3 +218,170 @@ func TestSyncNowEndToEnd(t *testing.T) {
 		t.Fatalf("remote item missing after download: %+v", items)
 	}
 }
+
+func TestSyncConflictKeptLocalPreservesVault(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AppData", dir)
+
+	a := &App{}
+	a.vaultMu.Lock()
+	v, err := createVault(filepath.Join(a.VaultDir(), "c1.passapp"), "correct-horse-2026!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.vault, a.vaultFile, a.vaultName = v, "c1.passapp", "c1"
+	a.vaultMu.Unlock()
+	defer func() {
+		a.vaultMu.Lock()
+		cur := a.vault
+		a.vault = nil
+		a.vaultMu.Unlock()
+		if cur != nil {
+			cur.close()
+		}
+	}()
+
+	if _, err := v.create(Item{Title: "A"}); err != nil {
+		t.Fatal(err)
+	}
+	syncDir := filepath.Join(dir, "sync-target")
+	if err := os.MkdirAll(syncDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetSyncConfig("local", syncDir); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := a.SyncNow(); err != nil || res != "uploaded" {
+		t.Fatalf("initial upload: %v %q", err, res)
+	}
+
+	// both sides change; local stays NEWER (local wins)
+	a.vaultMu.RLock()
+	cur := a.vault
+	a.vaultMu.RUnlock()
+	if _, err := cur.create(Item{Title: "Local"}); err != nil {
+		t.Fatal(err)
+	}
+	a.vaultMu.Lock()
+	a.vault = nil
+	a.vaultMu.Unlock()
+	cur.close()
+	vr, err := openVault(filepath.Join(syncDir, "c1.passapp"), "correct-horse-2026!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := vr.create(Item{Title: "Remote"}); err != nil {
+		t.Fatal(err)
+	}
+	vr.close()
+	// reopen as the app session
+	v2, err := openVault(filepath.Join(a.VaultDir(), "c1.passapp"), "correct-horse-2026!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.vaultMu.Lock()
+	a.vault, a.vaultFile, a.vaultName = v2, "c1.passapp", "c1"
+	a.vaultMu.Unlock()
+	future := time.Now().Add(5 * time.Second)
+	if err := os.Chtimes(filepath.Join(a.VaultDir(), "c1.passapp"), future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	// kept-local conflict: vault must REMAIN unlocked afterwards (bug #1
+	// used to close it via preSwap on the stash pull and fail the push)
+	res, err := a.SyncNow()
+	if err != nil || res != "conflict: kept local" {
+		t.Fatalf("conflict sync: %v %q", err, res)
+	}
+	if !a.IsUnlocked() {
+		t.Fatal("vault must stay unlocked after kept-local conflict")
+	}
+	conflicts, err := filepath.Glob(filepath.Join(a.VaultDir(), "c1*(conflict*.passapp"))
+	if err != nil || len(conflicts) != 1 {
+		t.Fatalf("remote conflict stash missing: %v %v", conflicts, err)
+	}
+}
+
+func TestSyncConflictKeptRemoteReloadsVault(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AppData", dir)
+
+	a := &App{}
+	a.vaultMu.Lock()
+	v, err := createVault(filepath.Join(a.VaultDir(), "c2.passapp"), "correct-horse-2026!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.vault, a.vaultFile, a.vaultName = v, "c2.passapp", "c2"
+	a.vaultMu.Unlock()
+
+	if _, err := v.create(Item{Title: "A"}); err != nil {
+		t.Fatal(err)
+	}
+	syncDir := filepath.Join(dir, "sync-target")
+	if err := os.MkdirAll(syncDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SetSyncConfig("local", syncDir); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := a.SyncNow(); err != nil || res != "uploaded" {
+		t.Fatalf("initial upload: %v %q", err, res)
+	}
+
+	// both sides change; remote is NEWER (remote wins)
+	a.vaultMu.Lock()
+	a.vault = nil
+	a.vaultMu.Unlock()
+	v.close()
+	vr, err := openVault(filepath.Join(syncDir, "c2.passapp"), "correct-horse-2026!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := vr.create(Item{Title: "Remote"}); err != nil {
+		t.Fatal(err)
+	}
+	vr.close()
+	future := time.Now().Add(5 * time.Second)
+	if err := os.Chtimes(filepath.Join(syncDir, "c2.passapp"), future, future); err != nil {
+		t.Fatal(err)
+	}
+	// local change (older)
+	v2, err := openVault(filepath.Join(a.VaultDir(), "c2.passapp"), "correct-horse-2026!")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v2.create(Item{Title: "Local"}); err != nil {
+		t.Fatal(err)
+	}
+	a.vaultMu.Lock()
+	a.vault, a.vaultFile, a.vaultName = v2, "c2.passapp", "c2"
+	a.vaultMu.Unlock()
+
+	res, err := a.SyncNow()
+	if err != nil || res != "conflict: kept remote" {
+		t.Fatalf("conflict sync: %v %q", err, res)
+	}
+	if !a.IsUnlocked() {
+		t.Fatal("vault must be reloaded after kept-remote conflict")
+	}
+	items := a.vault.list()
+	found := false
+	for _, it := range items {
+		if it.Title == "Remote" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("remote item missing after conflict download")
+	}
+	localConflict, _ := filepath.Glob(filepath.Join(a.VaultDir(), "c2*(conflict*.passapp"))
+	if len(localConflict) != 1 {
+		t.Fatalf("local conflict copy missing: %v", localConflict)
+	}
+	a.vaultMu.Lock()
+	cur := a.vault
+	a.vault = nil
+	a.vaultMu.Unlock()
+	cur.close()
+}

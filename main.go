@@ -59,6 +59,9 @@ func main() {
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "ciphersync-single-instance",
 			OnSecondInstanceLaunch: func(_ options.SecondInstanceData) {
+				if app.ctx == nil {
+					return
+				}
 				runtime.WindowUnminimise(app.ctx)
 				runtime.WindowShow(app.ctx)
 			},

@@ -335,6 +335,8 @@ func (v *Vault) importItems(items []Item) ImportResult {
 				continue
 			}
 		}
+		// NOTE: same title+username with a DIFFERENT password is kept on
+		// purpose (password variants), matching the parse-level dedupe
 		if v.findDuplicate(it) {
 			res.Skipped++
 			continue

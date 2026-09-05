@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"runtime"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -55,18 +56,21 @@ func currentThreadID() uint32 {
 // startQuickAccessHotkey spawns a dedicated OS thread that registers
 // Ctrl+Shift+Space (hWnd=NULL hotkeys bind to the calling thread) and runs
 // the message pump until stopQuickAccessHotkey targets the returned thread
-// id. It blocks until registration succeeds or fails.
-func startQuickAccessHotkey(onHotkey func()) (uint32, error) {
+// id. It blocks until registration succeeds or fails and returns a channel
+// closed when the pump thread has fully exited (hotkey unregistered).
+func startQuickAccessHotkey(onHotkey func()) (uint32, <-chan struct{}, error) {
 	type result struct {
 		tid uint32
 		err error
 	}
 	ready := make(chan result, 1)
+	finished := make(chan struct{})
 	go func() {
 		// Pin the goroutine: registration AND the message pump must live on
 		// the same OS thread for RegisterHotKey/GetMessageW to see WM_HOTKEY.
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
+		defer close(finished)
 		tid := currentThreadID()
 		r, _, callErr := procRegisterHotKey.Call(
 			0,
@@ -86,16 +90,26 @@ func startQuickAccessHotkey(onHotkey func()) (uint32, error) {
 		quickAccessLoop(onHotkey)
 	}()
 	res := <-ready
-	return res.tid, res.err
+	return res.tid, finished, res.err
 }
 
 // stopQuickAccessHotkey posts the stop message to the pump thread, which
-// then unregisters the hotkey on the thread that owns it and exits.
-func stopQuickAccessHotkey(threadID uint32) {
+// then unregisters the hotkey on the thread that owns it and exits. It
+// waits (bounded) for the unregister so a rapid disable+enable toggle
+// cannot race into ERROR_HOTKEY_ALREADY_REGISTERED.
+func stopQuickAccessHotkey(threadID uint32, finished <-chan struct{}) {
 	if threadID == 0 {
 		return
 	}
 	_, _, _ = procPostThreadMessageW.Call(uintptr(threadID), hotkeyWMStop, 0, 0)
+	if finished == nil {
+		return
+	}
+	select {
+	case <-finished:
+	case <-time.After(2 * time.Second):
+		// pump stuck: give up waiting (hotkey may linger until process exit)
+	}
 }
 
 // quickAccessLoop runs a message pump on the calling thread and invokes
