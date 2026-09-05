@@ -11,6 +11,7 @@ import {
     LogOut,
     Minus,
     Plus,
+    RefreshCw,
     RotateCcw,
     Search,
     Settings,
@@ -32,6 +33,7 @@ import {SettingsModal} from './SettingsModal'
 import {ImportModal} from './ImportModal'
 import {ExportModal} from './ExportModal'
 import {WatchtowerModal} from './WatchtowerModal'
+import {SyncModal} from './SyncModal'
 import {QuickAccess} from './QuickAccess'
 import {useTOTPCode} from './TOTPDisplay'
 import {extractDomain, downloadFile, safeCopy} from '../lib/util'
@@ -52,11 +54,12 @@ function Favicon({url, domain}: {url: string; domain: string}) {
     return <img src={data} alt="" className="h-6 w-6 shrink-0 rounded-full bg-transparent object-contain"/>
 }
 
-function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}: {
+function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower, onOpenSync}: {
     onOpenSettings: () => void
     onOpenImport: () => void
     onOpenExport: () => void
     onOpenWatchtower: () => void
+    onOpenSync: () => void
 }) {
     const items = useApp((s) => s.items)
     const category = useApp((s) => s.category)
@@ -116,6 +119,14 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
             active: false,
             count: null,
             onClick: onOpenWatchtower,
+        },
+        {
+            key: 'sync',
+            label: t('sync.title'),
+            icon: <RefreshCw size={16}/>,
+            active: false,
+            count: null,
+            onClick: onOpenSync,
         },
         {
             key: 'trash',
@@ -764,6 +775,7 @@ export function MainScreen() {
     const [showImport, setShowImport] = useState(false)
     const [showExport, setShowExport] = useState(false)
     const [showWatchtower, setShowWatchtower] = useState(false)
+    const [showSync, setShowSync] = useState(false)
 
     useEffect(() => {
         void loadSettings()
@@ -818,6 +830,7 @@ export function MainScreen() {
                     onOpenImport={() => setShowImport(true)}
                     onOpenExport={() => setShowExport(true)}
                     onOpenWatchtower={() => setShowWatchtower(true)}
+                    onOpenSync={() => setShowSync(true)}
                 />
                 <ListPane/>
                 <main className="min-w-0 flex-1">
@@ -833,6 +846,7 @@ export function MainScreen() {
                     onSelectItem={(id) => selectItem(id)}
                 />
             )}
+            {showSync && <SyncModal onClose={() => setShowSync(false)}/>}
             <QuickAccess/>
         </div>
     )

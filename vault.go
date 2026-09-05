@@ -293,6 +293,38 @@ func normalizeItem(item *Item) {
 	}
 }
 
+// openVaultWithKey opens a vault using a previously-obtained vault key
+// (e.g. held in memory across a sync download-swap) instead of the
+// master password. The key is verified by decrypting the stored items.
+// The key is copied internally; callers keep ownership of their slice.
+func openVaultWithKey(path string, vaultKey []byte) (*Vault, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, ErrNotAVault
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if err := ensureTables(db); err != nil {
+		db.Close()
+		return nil, ErrNotAVault
+	}
+	keyCopy := append([]byte{}, vaultKey...)
+	v := &Vault{
+		path:     path,
+		db:       db,
+		vaultKey: keyCopy,
+		items:    []Item{},
+		itemsBy:  map[string]*Item{},
+	}
+	if err := v.loadItems(); err != nil {
+		v.close()
+		return nil, ErrWrongPassword
+	}
+	return v, nil
+}
+
 // sortItems sorts the in-memory items and rebuilds the index map, keeping
 // itemsBy pointers consistent with the sorted slice.
 func (v *Vault) sortItems() {

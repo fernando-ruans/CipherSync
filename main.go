@@ -14,6 +14,14 @@ import (
 var assets embed.FS
 
 func main() {
+	// Browser-extension native-messaging host mode. Browsers launch the
+	// manifest path with their own args (origin/extension id) and piped
+	// stdin, so detect that in addition to the explicit flag.
+	if isNativeHostInvocation() {
+		runNativeHost()
+		return
+	}
+
 	// Create an instance of the app structure
 	app := NewApp()
 

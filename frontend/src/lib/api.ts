@@ -63,6 +63,20 @@ export const api = {
     setCloseToTray: (enabled: boolean): Promise<void> => window.go.main.App.SetCloseToTray(enabled),
     setQuickAccess: (enabled: boolean): Promise<void> => window.go.main.App.SetQuickAccess(enabled),
     closeQuickAccess: (): Promise<void> => window.go.main.App.CloseQuickAccess(),
+    getSyncConfig: (): Promise<Record<string, string>> => window.go.main.App.GetSyncConfig(),
+    setSyncConfig: (provider: string, remote: string): Promise<void> =>
+        window.go.main.App.SetSyncConfig(provider, remote),
+    disconnectSync: (): Promise<void> => window.go.main.App.DisconnectSync(),
+    syncNow: (): Promise<string> => window.go.main.App.SyncNow(),
+    getSyncStatus: (): Promise<import('./types').SyncStatus> => window.go.main.App.GetSyncStatus(),
+    driveConnect: (clientId: string, clientSecret: string): Promise<string> =>
+        window.go.main.App.DriveConnect(clientId, clientSecret),
+    driveDisconnect: (): Promise<void> => window.go.main.App.DriveDisconnect(),
+    driveSetupFolder: (): Promise<string> => window.go.main.App.DriveSetupFolder(),
+    installNativeHost: (chromeExtID: string, firefoxAddonID: string): Promise<void> =>
+        window.go.main.App.InstallNativeHost(chromeExtID, firefoxAddonID),
+    uninstallNativeHost: (): Promise<void> => window.go.main.App.UninstallNativeHost(),
+    generatePairingCode: (): Promise<string> => window.go.main.App.GeneratePairingCode(),
     prefetchFavicons: (): Promise<void> => window.go.main.App.PrefetchFavicons(),
     importCSV: (data: string, mapping: import('./types').FieldMapping[]): Promise<import('./types').ImportResult> =>
         window.go.main.App.ImportCSV(data, mapping),

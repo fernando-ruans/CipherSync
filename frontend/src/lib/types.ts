@@ -56,6 +56,16 @@ export interface AttachmentPayload {
     data: string
 }
 
+export interface SyncStatus {
+    configured: boolean
+    provider: string
+    remote: string
+    state: string
+    lastSync: number
+    detail: string
+    conflict: string
+}
+
 export interface VersionEntry {
     id: string
     timestamp: number
@@ -168,6 +178,17 @@ export interface AppApi {
     SetCloseToTray(enabled: boolean): Promise<void>
     SetQuickAccess(enabled: boolean): Promise<void>
     CloseQuickAccess(): Promise<void>
+    GetSyncConfig(): Promise<Record<string, string>>
+    SetSyncConfig(provider: string, remote: string): Promise<void>
+    DisconnectSync(): Promise<void>
+    SyncNow(): Promise<string>
+    GetSyncStatus(): Promise<SyncStatus>
+    DriveConnect(clientId: string, clientSecret: string): Promise<string>
+    DriveDisconnect(): Promise<void>
+    DriveSetupFolder(): Promise<string>
+    InstallNativeHost(chromeExtID: string, firefoxAddonID: string): Promise<void>
+    UninstallNativeHost(): Promise<void>
+    GeneratePairingCode(): Promise<string>
     PrefetchFavicons(): Promise<void>
     ImportCSV(data: string, mapping: FieldMapping[]): Promise<ImportResult>
     ImportAutoCSV(data: string): Promise<ImportResult>

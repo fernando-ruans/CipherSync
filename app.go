@@ -34,6 +34,10 @@ type App struct {
 	qaPrevW   int
 	qaPrevH   int
 	qaHotkey  bool
+	syncMu    sync.Mutex
+	syncStatus SyncStatus
+	localAPIMu sync.Mutex
+	localAPI   *localAPIServer
 }
 
 var errQuickAccessUnsupported = errors.New("quick access disponível apenas no Windows")
@@ -51,6 +55,184 @@ func (a *App) startup(ctx context.Context) {
 	a.qaMu.Lock()
 	_ = a.enableQuickAccessHotkey()
 	a.qaMu.Unlock()
+	// Background sync ticker (60s): no-ops when locked or unconfigured.
+	go a.syncScheduler()
+}
+
+// ---------- Sync ----------
+
+// buildSyncProvider constructs the configured provider for the current vault.
+func (a *App) buildSyncProvider(v *Vault) (SyncProvider, string, error) {
+	provider, err := v.getSetting("sync_provider")
+	if err != nil {
+		return nil, "", err
+	}
+	remote, err := v.getSetting("sync_remote")
+	if err != nil {
+		return nil, "", err
+	}
+	switch provider {
+	case "local":
+		if remote == "" {
+			return nil, "", errors.New("pasta de sincronização não configurada")
+		}
+		return &localProvider{dir: remote}, "", nil
+	case "drive":
+		if remote == "" {
+			return nil, "", errors.New("pasta do Google Drive não configurada")
+		}
+		client, _, err := a.driveAuthedClient()
+		if err != nil {
+			return nil, "", err
+		}
+		a.vaultMu.RLock()
+		file := a.vaultFile
+		a.vaultMu.RUnlock()
+		return &driveProvider{client: client}, remote + "/" + file, nil
+	default:
+		return nil, "", errors.New("sincronização não configurada")
+	}
+}
+
+// GetSyncConfig returns the current vault's sync provider and remote.
+func (a *App) GetSyncConfig() (map[string]string, error) {
+	v := a.currentVault()
+	if v == nil {
+		return nil, ErrVaultLocked
+	}
+	provider, _ := v.getSetting("sync_provider")
+	remote, _ := v.getSetting("sync_remote")
+	return map[string]string{"provider": provider, "remote": remote}, nil
+}
+
+// SetSyncConfig configures sync for the current vault. Provider "" disables.
+// For "local", remote is a folder path. For "drive", remote is a folder ID.
+func (a *App) SetSyncConfig(provider, remote string) error {
+	v := a.currentVault()
+	if v == nil {
+		return ErrVaultLocked
+	}
+	if provider != "" && provider != "local" && provider != "drive" {
+		return errors.New("provedor desconhecido")
+	}
+	if provider == "local" {
+		info, err := os.Stat(remote)
+		if err != nil || !info.IsDir() {
+			return errors.New("pasta local inválida")
+		}
+	}
+	if err := v.setSetting("sync_provider", provider); err != nil {
+		return err
+	}
+	if err := v.setSetting("sync_remote", remote); err != nil {
+		return err
+	}
+	// reset state so the next run does a full compare
+	_ = os.Remove(syncStatePath(v.path))
+	a.setSyncStatus(SyncStatus{Configured: provider != "", Provider: provider, Remote: remote, State: "idle"})
+	return nil
+}
+
+// DisconnectSync disables sync for the current vault.
+func (a *App) DisconnectSync() error {
+	return a.SetSyncConfig("", "")
+}
+
+// GetSyncStatus returns the last known sync status.
+func (a *App) GetSyncStatus() SyncStatus {
+	a.syncMu.Lock()
+	defer a.syncMu.Unlock()
+	return a.syncStatus
+}
+
+func (a *App) setSyncStatus(s SyncStatus) {
+	a.syncMu.Lock()
+	defer a.syncMu.Unlock()
+	a.syncStatus = s
+}
+
+// SyncNow runs one sync cycle for the current vault.
+func (a *App) SyncNow() (string, error) {
+	v := a.currentVault()
+	if v == nil {
+		return "", ErrVaultLocked
+	}
+	a.vaultMu.RLock()
+	file := a.vaultFile
+	a.vaultMu.RUnlock()
+	provider, remote, err := a.buildSyncProvider(v)
+	if err != nil {
+		return "", err
+	}
+	if remote == "" {
+		remote = file
+	}
+	localPath := filepath.Join(a.VaultDir(), file)
+
+	// copy the key for a possible reload after download-swap (always wiped)
+	key := append([]byte{}, v.vaultKey...)
+	defer wipe(key)
+
+	engine := &SyncEngine{provider: provider, remote: remote}
+	result, err := engine.syncFile(localPath,
+		func() (syncState, error) { return loadSyncState(localPath) },
+		func(s syncState) error { return saveSyncState(localPath, s) },
+		func() error { return a.reloadVaultAfterSync(file, key) },
+	)
+	status := SyncStatus{Configured: true, Provider: provider.Name(), State: "ok", LastSync: time.Now().UnixMilli()}
+	if err != nil {
+		status.State = "error"
+		status.Detail = err.Error()
+	} else {
+		status.Detail = result
+		if strings.HasPrefix(result, "conflict") {
+			status.State = "conflict"
+			status.Conflict = result
+		}
+	}
+	// refresh cached status fields
+	a.setSyncStatus(status)
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
+// reloadVaultAfterSync reopens the swapped vault file with the in-memory key.
+func (a *App) reloadVaultAfterSync(file string, key []byte) error {
+	defer wipe(key)
+	a.vaultMu.Lock()
+	defer a.vaultMu.Unlock()
+	if a.vault != nil {
+		a.vault.close()
+	}
+	v, err := openVaultWithKey(filepath.Join(a.VaultDir(), file), key)
+	if err != nil {
+		a.vault, a.vaultFile, a.vaultName = nil, "", ""
+		return err
+	}
+	a.vault = v
+	return nil
+}
+
+// syncScheduler ticks every 60s and syncs when unlocked + configured.
+func (a *App) syncScheduler() {
+	t := time.NewTicker(60 * time.Second)
+	defer t.Stop()
+	for range t.C {
+		v := a.currentVault()
+		if v == nil {
+			continue
+		}
+		provider, _ := v.getSetting("sync_provider")
+		if provider == "" {
+			continue
+		}
+		if _, err := a.SyncNow(); err != nil {
+			// status already recorded; keep ticking
+			continue
+		}
+	}
 }
 
 // ---------- Quick Access (global hotkey popup) ----------
@@ -223,6 +405,7 @@ func (a *App) CreateVault(name, password, confirm string) error {
 	a.vaultFile = file
 	a.vaultName = name
 	a.vaultMu.Unlock()
+	_ = a.startLocalAPI()
 	return nil
 }
 
@@ -255,6 +438,8 @@ func (a *App) OpenVault(file, password string) error {
 	go func() {
 		_, _ = a.autoBackup(v, file)
 	}()
+	// local API for the browser-extension host (only while unlocked)
+	_ = a.startLocalAPI()
 	// re-check the quick-access preference now that we can read settings
 	a.qaMu.Lock()
 	defer a.qaMu.Unlock()
@@ -327,6 +512,7 @@ func (a *App) Lock() {
 	if v != nil {
 		v.close()
 	}
+	a.stopLocalAPI()
 }
 
 // GetItems returns all active (non-trashed) items of the unlocked vault.

@@ -307,6 +307,30 @@ export namespace main {
 	        this.excludeAmbiguous = source["excludeAmbiguous"];
 	    }
 	}
+	export class SyncStatus {
+	    configured: boolean;
+	    provider: string;
+	    remote: string;
+	    state: string;
+	    lastSync: number;
+	    detail: string;
+	    conflict: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.configured = source["configured"];
+	        this.provider = source["provider"];
+	        this.remote = source["remote"];
+	        this.state = source["state"];
+	        this.lastSync = source["lastSync"];
+	        this.detail = source["detail"];
+	        this.conflict = source["conflict"];
+	    }
+	}
 	export class TOTPCode {
 	    code: string;
 	    secondsRemaining: number;

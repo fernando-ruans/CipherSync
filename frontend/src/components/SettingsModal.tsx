@@ -8,6 +8,7 @@ import {getStoredTheme, setStoredTheme} from '../lib/theme'
 import type {Theme} from '../lib/theme'
 import {useT} from '../lib/locales'
 import type {Lang} from '../lib/locales'
+import {safeCopy} from '../lib/util'
 
 const AUTOLOCK_OPTIONS: {value: number; labelKey: 'settings.never' | 'settings.min1' | 'settings.min5' | 'settings.min15' | 'settings.min30' | 'settings.hour1'}[] = [
     {value: 0, labelKey: 'settings.never'},
@@ -80,6 +81,34 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
     const [confirmText, setConfirmText] = useState('')
     const [deleting, setDeleting] = useState(false)
     const [backingUp, setBackingUp] = useState(false)
+    const [pairCode, setPairCode] = useState('')
+
+    async function installHost() {
+        try {
+            // extension IDs filled after store publication; empty = permissive manifest
+            await api.installNativeHost('', 'ciphersync@ciphersync.app')
+            toast.success(t('ext.installed'))
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        }
+    }
+
+    async function uninstallHost() {
+        try {
+            await api.uninstallNativeHost()
+            toast.success(t('ext.uninstalled'))
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        }
+    }
+
+    async function genPairing() {
+        try {
+            setPairCode(await api.generatePairingCode())
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        }
+    }
 
     async function doDeleteAccount() {
         setDeleting(true)
@@ -216,6 +245,33 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                             </option>
                         ))}
                     </select>
+                </Section>
+
+                <Section title={t('ext.title')}>
+                    <p className="mb-2 text-xs text-faint">
+                        {t('ext.desc')}
+                    </p>
+                    <div className="flex gap-2">
+                        <Button variant="subtle" className="flex-1" onClick={() => void installHost()}>
+                            {t('ext.install')}
+                        </Button>
+                        <Button variant="ghost" onClick={() => void uninstallHost()}>
+                            {t('ext.uninstall')}
+                        </Button>
+                    </div>
+                    <Button variant="subtle" className="mt-2 w-full" onClick={() => void genPairing()}>
+                        {t('ext.pairing')}
+                    </Button>
+                    {pairCode && (
+                        <div
+                            className="mt-2 cursor-pointer rounded-lg border border-edge bg-input p-3 text-center font-mono text-lg font-bold tracking-widest text-accent"
+                            title={t('ext.codeCopied')}
+                            onClick={() => void safeCopy(pairCode, t('ext.codeCopied'))}
+                        >
+                            {pairCode}
+                        </div>
+                    )}
+                    {pairCode && <p className="mt-1.5 text-xs text-faint">{t('ext.pairingDesc')}</p>}
                 </Section>
 
                 <Section title={t('settings.about')}>

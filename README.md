@@ -50,6 +50,12 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 
 ### Experiência
 - **Múltiplos cofres** (pessoal, trabalho, família), cada um com sua própria senha mestra, com seletor na tela de desbloqueio.
+- **System tray** — ícone na bandeja com Mostrar, Bloquear, Gerar senha e Sair; fechar minimiza para a bandeja (configurável).
+- **Quick Access** — popup global de busca com `Ctrl+Shift+Space`, mesmo com outro app focado.
+- **Passkeys** — inventário de credenciais FIDO2 (referência, sem autenticação WebAuthn).
+- **Idiomas** — Português (BR) e English, com seletor em Configurações.
+- **Sincronização** — pasta local/NAS e Google Drive (OAuth), com cópias de conflito automáticas.
+- **Extensão de navegador** — Chrome/Firefox via host nativo (preenchimento, TOTP, pareamento).
 - **Auto-lock** configurável (1/5/15/30/60 min ou nunca) e bloqueio ao minimizar a janela.
 - **Temas** Dark / Light / Sistema com persistência.
 - **Importação** de Chrome, Firefox, Edge, LastPass, 1Password, Bitwarden e KeePass (.kdbx).
@@ -233,6 +239,18 @@ Para regenerar os ícones a partir de `ciphersync-logo.png`:
 
 ---
 
+## Google Drive (sincronização)
+
+1. Crie um projeto no [Google Cloud Console](https://console.cloud.google.com/) e um **OAuth client ID** do tipo **Desktop app**.
+2. No app: abra um cofre → **Sync** (sidebar) → escolha **Google Drive**.
+3. Cole o **Client ID** (e o Client Secret, se houver) e clique **Conectar Google** — o navegador abre para autorizar.
+4. Clique **Criar/usar pasta** para criar a pasta `CipherSync` no Drive e ativar o sync.
+5. Os tokens ficam no gerenciador de credenciais do SO (nunca em arquivo).
+
+> A primeira conexão pode exibir o aviso "app não verificado" do Google (tela de consentimento em modo de teste) — é esperado até a verificação do app.
+
+---
+
 ## Testes
 
 ```bash
@@ -250,9 +268,10 @@ Arquivos de teste de import em `testdata/`:
 
 ## Roadmap
 
-- **Fase 5** — Sincronização pluggable (arquivo local, Dropbox, Google Drive, WebDAV) com resolução de conflitos
-- **Fase 6** — Campos customizados por item, anexos, travel mode, emergency kit, compartilhamento
-- **Fase 7** — System tray, quick access (popup global), extensão de navegador, backups agendados, CI/CD
+- **Fase 5** — Acesso: system tray, quick access global (Ctrl+Shift+Espaço), passkeys (inventário), i18n EN + PT-BR
+- **Fase 6** — Sincronização: engine + pasta local/NAS + Google Drive, com resolução de conflitos
+- **Fase 7** — Extensão de navegador (Chrome/Firefox) via host nativo
+- **Futuro** — Campos customizados, travel mode, emergency kit, compartilhamento, CI/CD
 
 ---
 

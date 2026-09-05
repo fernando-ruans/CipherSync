@@ -58,6 +58,22 @@ export function DeleteVault(arg1) {
   return window['go']['main']['App']['DeleteVault'](arg1);
 }
 
+export function DisconnectSync() {
+  return window['go']['main']['App']['DisconnectSync']();
+}
+
+export function DriveConnect(arg1, arg2) {
+  return window['go']['main']['App']['DriveConnect'](arg1, arg2);
+}
+
+export function DriveDisconnect() {
+  return window['go']['main']['App']['DriveDisconnect']();
+}
+
+export function DriveSetupFolder() {
+  return window['go']['main']['App']['DriveSetupFolder']();
+}
+
 export function ExportCSV() {
   return window['go']['main']['App']['ExportCSV']();
 }
@@ -76,6 +92,10 @@ export function ExportSelectedCSV(arg1) {
 
 export function ExportSelectedJSON(arg1) {
   return window['go']['main']['App']['ExportSelectedJSON'](arg1);
+}
+
+export function GeneratePairingCode() {
+  return window['go']['main']['App']['GeneratePairingCode']();
 }
 
 export function GeneratePassphrase(arg1) {
@@ -108,6 +128,14 @@ export function GetItems() {
 
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
+}
+
+export function GetSyncConfig() {
+  return window['go']['main']['App']['GetSyncConfig']();
+}
+
+export function GetSyncStatus() {
+  return window['go']['main']['App']['GetSyncStatus']();
 }
 
 export function GetTOTPCode(arg1) {
@@ -144,6 +172,10 @@ export function ImportKeePassDB(arg1, arg2) {
 
 export function IngestTOTPURI(arg1) {
   return window['go']['main']['App']['IngestTOTPURI'](arg1);
+}
+
+export function InstallNativeHost(arg1, arg2) {
+  return window['go']['main']['App']['InstallNativeHost'](arg1, arg2);
 }
 
 export function IsUnlocked() {
@@ -210,8 +242,20 @@ export function SetSetting(arg1, arg2) {
   return window['go']['main']['App']['SetSetting'](arg1, arg2);
 }
 
+export function SetSyncConfig(arg1, arg2) {
+  return window['go']['main']['App']['SetSyncConfig'](arg1, arg2);
+}
+
 export function SetTrashDays(arg1) {
   return window['go']['main']['App']['SetTrashDays'](arg1);
+}
+
+export function SyncNow() {
+  return window['go']['main']['App']['SyncNow']();
+}
+
+export function UninstallNativeHost() {
+  return window['go']['main']['App']['UninstallNativeHost']();
 }
 
 export function UpdateItem(arg1) {

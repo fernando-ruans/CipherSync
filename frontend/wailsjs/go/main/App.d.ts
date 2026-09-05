@@ -30,6 +30,14 @@ export function DeleteItems(arg1:Array<string>):Promise<void>;
 
 export function DeleteVault(arg1:string):Promise<void>;
 
+export function DisconnectSync():Promise<void>;
+
+export function DriveConnect(arg1:string,arg2:string):Promise<string>;
+
+export function DriveDisconnect():Promise<void>;
+
+export function DriveSetupFolder():Promise<string>;
+
 export function ExportCSV():Promise<string>;
 
 export function ExportEncryptedJSON(arg1:string):Promise<string>;
@@ -39,6 +47,8 @@ export function ExportJSON():Promise<string>;
 export function ExportSelectedCSV(arg1:Array<string>):Promise<string>;
 
 export function ExportSelectedJSON(arg1:Array<string>):Promise<string>;
+
+export function GeneratePairingCode():Promise<string>;
 
 export function GeneratePassphrase(arg1:number):Promise<string>;
 
@@ -55,6 +65,10 @@ export function GetItemVersions(arg1:string):Promise<Array<main.VersionEntry>>;
 export function GetItems():Promise<Array<main.Item>>;
 
 export function GetSettings():Promise<Record<string, string>>;
+
+export function GetSyncConfig():Promise<Record<string, string>>;
+
+export function GetSyncStatus():Promise<main.SyncStatus>;
 
 export function GetTOTPCode(arg1:string):Promise<main.TOTPCode>;
 
@@ -73,6 +87,8 @@ export function ImportEncryptedTransfer(arg1:string,arg2:string):Promise<main.Im
 export function ImportKeePassDB(arg1:string,arg2:string):Promise<main.ImportResult>;
 
 export function IngestTOTPURI(arg1:string):Promise<string>;
+
+export function InstallNativeHost(arg1:string,arg2:string):Promise<void>;
 
 export function IsUnlocked():Promise<boolean>;
 
@@ -106,7 +122,13 @@ export function SetQuickAccess(arg1:boolean):Promise<void>;
 
 export function SetSetting(arg1:string,arg2:string):Promise<void>;
 
+export function SetSyncConfig(arg1:string,arg2:string):Promise<void>;
+
 export function SetTrashDays(arg1:number):Promise<void>;
+
+export function SyncNow():Promise<string>;
+
+export function UninstallNativeHost():Promise<void>;
 
 export function UpdateItem(arg1:main.Item):Promise<void>;
 
