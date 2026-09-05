@@ -308,6 +308,7 @@ const dict = {
 
         'ext.title': 'Extensão do navegador',
         'ext.desc': 'Instale o host nativo para que a extensão do Chrome/Firefox converse com este app.',
+        'ext.chromeId': 'ID da extensão no Chrome (ver em chrome://extensions)',
         'ext.install': 'Instalar host nativo',
         'ext.uninstall': 'Remover host nativo',
         'ext.installed': 'Host nativo instalado',
@@ -668,6 +669,7 @@ const dict = {
 
         'ext.title': 'Browser extension',
         'ext.desc': 'Install the native host so the Chrome/Firefox extension can talk to this app.',
+        'ext.chromeId': 'Chrome extension ID (see chrome://extensions)',
         'ext.install': 'Install native host',
         'ext.uninstall': 'Remove native host',
         'ext.installed': 'Native host installed',

@@ -82,11 +82,11 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
     const [deleting, setDeleting] = useState(false)
     const [backingUp, setBackingUp] = useState(false)
     const [pairCode, setPairCode] = useState('')
+    const [chromeExtId, setChromeExtId] = useState('')
 
     async function installHost() {
         try {
-            // extension IDs filled after store publication; empty = permissive manifest
-            await api.installNativeHost('', 'ciphersync@ciphersync.app')
+            await api.installNativeHost(chromeExtId.trim(), 'ciphersync@ciphersync.app')
             toast.success(t('ext.installed'))
         } catch (err) {
             toast.error(await errorMessage(err))
@@ -251,7 +251,13 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                     <p className="mb-2 text-xs text-faint">
                         {t('ext.desc')}
                     </p>
-                    <div className="flex gap-2">
+                    <Input
+                        label={t('ext.chromeId')}
+                        value={chromeExtId}
+                        onChange={setChromeExtId}
+                        placeholder="ex: abcdefghijklmnopabcdefghijklmnop"
+                    />
+                    <div className="mt-2 flex gap-2">
                         <Button variant="subtle" className="flex-1" onClick={() => void installHost()}>
                             {t('ext.install')}
                         </Button>
