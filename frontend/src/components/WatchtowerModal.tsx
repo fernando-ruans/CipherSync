@@ -4,6 +4,7 @@ import {AlertTriangle, ArrowRight, CalendarX, KeyRound, Loader2, ShieldCheck, Sh
 import {api, errorMessage} from '../lib/api'
 import {useApp} from '../state'
 import {Modal} from './ui'
+import {useT} from '../lib/locales'
 import type {HealthReport, ItemRef} from '../lib/types'
 
 function scoreColor(score: number): string {
@@ -33,13 +34,14 @@ function StatCard({label, count, color, icon, onClick}: {
 }
 
 function ItemRow({ref, onSelect}: {ref: ItemRef; onSelect: (id: string) => void}) {
+    const t = useT()
     const color = ref.score >= 3 ? 'text-emerald-400' : ref.score === 2 ? 'text-amber-400' : 'text-red-400'
     return (
         <button
             onClick={() => onSelect(ref.id)}
             className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-hover"
         >
-            <span className="truncate text-soft">{ref.title || 'Sem título'}</span>
+            <span className="truncate text-soft">{ref.title || t('detail.noTitle')}</span>
             <span className="flex items-center gap-2">
                 <span className={`text-xs font-medium ${color}`}>
                     {'•'.repeat(Math.max(1, ref.score))}
@@ -56,6 +58,7 @@ export function WatchtowerModal({onClose, onSelectItem}: {
     onClose: () => void
     onSelectItem: (id: string) => void
 }) {
+    const t = useT()
     const setBreachedIds = useApp((s) => s.setBreachedIds)
     const [report, setReport] = useState<HealthReport | null>(null)
     const [section, setSection] = useState<Section>('weak')
@@ -75,9 +78,9 @@ export function WatchtowerModal({onClose, onSelectItem}: {
 
     if (!report) {
         return (
-            <Modal title="Watchtower" onClose={onClose}>
+            <Modal title={t('watch.title')} onClose={onClose}>
                 <div className="flex items-center justify-center gap-2 py-10 text-mut">
-                    <Loader2 size={18} className="animate-spin"/> Analisando senhas...
+                    <Loader2 size={18} className="animate-spin"/> {t('watch.analyzing')}
                 </div>
             </Modal>
         )
@@ -89,19 +92,19 @@ export function WatchtowerModal({onClose, onSelectItem}: {
     }
 
     const sections: {key: Section; label: string; count: number; items: ItemRef[]; empty: string}[] = [
-        {key: 'weak', label: 'Fracas', count: report.weakCount, items: report.weakItems, empty: 'Nenhuma senha fraca '},
-        {key: 'dup', label: 'Duplicadas', count: report.duplicateCount, items: [], empty: 'Nenhuma senha duplicada '},
-        {key: 'old', label: 'Antigas', count: report.oldCount, items: report.oldItems, empty: 'Nenhuma senha antiga '},
-        {key: '2fa', label: 'Sem 2FA', count: report.missing2FA, items: report.missing2FAItems, empty: 'Tudo com 2FA '},
-        {key: 'breach', label: 'Vazadas', count: report.breachedCount, items: report.breachedItems, empty: 'Nenhuma senha vazada '},
+        {key: 'weak', label: t('watch.weak'), count: report.weakCount, items: report.weakItems, empty: t('watch.empty')},
+        {key: 'dup', label: t('watch.dup'), count: report.duplicateCount, items: [], empty: t('watch.empty')},
+        {key: 'old', label: t('watch.old'), count: report.oldCount, items: report.oldItems, empty: t('watch.empty')},
+        {key: '2fa', label: t('watch.no2fa'), count: report.missing2FA, items: report.missing2FAItems, empty: t('watch.empty')},
+        {key: 'breach', label: t('watch.breached'), count: report.breachedCount, items: report.breachedItems, empty: t('watch.empty')},
     ]
 
     return (
-        <Modal title="Watchtower" onClose={onClose} width="max-w-2xl">
+        <Modal title={t('watch.title')} onClose={onClose} width="max-w-2xl">
             <div className="mb-5 rounded-xl border border-edge bg-input p-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                        <Shield size={18} className="text-accent"/> Nível de segurança
+                        <Shield size={18} className="text-accent"/> {t('watch.score')}
                     </div>
                     <span className="text-2xl font-bold" style={{color: scoreColor(report.totalScore)}}>
                         {report.totalScore}%
@@ -117,8 +120,8 @@ export function WatchtowerModal({onClose, onSelectItem}: {
                     />
                 </div>
                 <p className="mt-2 text-xs text-faint">
-                    {report.totalPasswords} senha(s) analisada(s) em {report.totalItems} item(ns).
-                    {report.breachCheckError && ' (verificação de vazamento indisponível sem internet)'}
+                    {t('watch.analyzed', {n: report.totalPasswords, m: report.totalItems})}
+                    {report.breachCheckError && t('watch.offline')}
                 </p>
             </div>
 
@@ -150,15 +153,15 @@ export function WatchtowerModal({onClose, onSelectItem}: {
                 {section === 'dup' ? (
                     <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">
                         {report.duplicateGroups.length === 0 ? (
-                            <p className="px-2 py-6 text-center text-sm text-faint">Nenhuma senha duplicada </p>
+                            <p className="px-2 py-6 text-center text-sm text-faint">{t('watch.empty')}</p>
                         ) : (
                             report.duplicateGroups.map((g, i) => (
                                 <div key={i} className="rounded-lg border border-edge bg-panel2 p-2">
                                     <div className="mb-1 flex items-center justify-between px-1 text-xs">
-                                        <span className="font-mono text-mut" title="Senha oculta por segurança">
+                                        <span className="font-mono text-mut" title={t('watch.dup')}>
                                             {g.password.slice(0, 2)}{'•'.repeat(Math.max(4, Math.min(10, g.password.length - 2)))}
                                         </span>
-                                        <span className="text-faint">{g.items.length} itens</span>
+                                        <span className="text-faint">{g.items.length} {t('watch.items')}</span>
                                     </div>
                                     {g.items.map((r) => (
                                         <ItemRow key={r.id} ref={r} onSelect={select}/>

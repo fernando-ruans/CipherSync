@@ -6,14 +6,16 @@ import {api, errorMessage} from '../lib/api'
 import {Button, Input, Modal, RevealInput} from './ui'
 import {getStoredTheme, setStoredTheme} from '../lib/theme'
 import type {Theme} from '../lib/theme'
+import {useT} from '../lib/locales'
+import type {Lang} from '../lib/locales'
 
-const AUTOLOCK_OPTIONS = [
-    {value: 0, label: 'Nunca'},
-    {value: 1, label: '1 minuto'},
-    {value: 5, label: '5 minutos'},
-    {value: 15, label: '15 minutos'},
-    {value: 30, label: '30 minutos'},
-    {value: 60, label: '1 hora'},
+const AUTOLOCK_OPTIONS: {value: number; labelKey: 'settings.never' | 'settings.min1' | 'settings.min5' | 'settings.min15' | 'settings.min30' | 'settings.hour1'}[] = [
+    {value: 0, labelKey: 'settings.never'},
+    {value: 1, labelKey: 'settings.min1'},
+    {value: 5, labelKey: 'settings.min5'},
+    {value: 15, labelKey: 'settings.min15'},
+    {value: 30, labelKey: 'settings.min30'},
+    {value: 60, labelKey: 'settings.hour1'},
 ]
 
 function Section({title, children}: {title: string; children: React.ReactNode}) {
@@ -26,11 +28,12 @@ function Section({title, children}: {title: string; children: React.ReactNode}) 
 }
 
 function ThemePicker() {
+    const t = useT()
     const [theme, setTheme] = useState<Theme>(getStoredTheme())
     const options: {value: Theme; label: string; icon: React.ReactNode}[] = [
-        {value: 'light', label: 'Claro', icon: <Sun size={16}/>},
-        {value: 'dark', label: 'Escuro', icon: <Moon size={16}/>},
-        {value: 'system', label: 'Sistema', icon: <Monitor size={16}/>},
+        {value: 'light', label: t('settings.light'), icon: <Sun size={16}/>},
+        {value: 'dark', label: t('settings.dark'), icon: <Moon size={16}/>},
+        {value: 'system', label: t('settings.system'), icon: <Monitor size={16}/>},
     ]
     return (
         <div className="flex gap-2">
@@ -56,8 +59,15 @@ function ThemePicker() {
 }
 
 export function SettingsModal({onClose}: {onClose: () => void}) {
+    const t = useT()
+    const lang = useApp((s) => s.lang)
+    const setLang = useApp((s) => s.setLang)
     const autolockMinutes = useApp((s) => s.autolockMinutes)
     const setAutolockMinutes = useApp((s) => s.setAutolockMinutes)
+    const closeToTray = useApp((s) => s.closeToTray)
+    const setCloseToTray = useApp((s) => s.setCloseToTray)
+    const quickAccess = useApp((s) => s.quickAccess)
+    const setQuickAccess = useApp((s) => s.setQuickAccess)
     const deleteAccount = useApp((s) => s.deleteAccount)
     const trashDays = useApp((s) => s.trashDays)
     const setTrashDays = useApp((s) => s.setTrashDays)
@@ -86,7 +96,7 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
         setBackingUp(true)
         try {
             const dest = await api.backupNow()
-            toast.success(`Backup salvo em ${dest.split(/[\\/]/).pop()}`)
+            toast.success(t('settings.backupSaved', {name: dest.split(/[\\/]/).pop() ?? ''}))
         } catch (err) {
             toast.error(await errorMessage(err))
         } finally {
@@ -98,7 +108,7 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
         setLoading(true)
         try {
             await api.changeMasterPassword(oldPassword, newPassword, confirm)
-            toast.success('Senha mestra alterada')
+            toast.success(t('settings.pwChanged'))
             setChangePw(false)
             setOldPassword('')
             setNewPassword('')
@@ -111,14 +121,25 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
     }
 
     return (
-        <Modal title="Configurações" onClose={onClose}>
+        <Modal title={t('settings.title')} onClose={onClose}>
             <div className="space-y-6">
-                <Section title="Tema">
+                <Section title={t('settings.theme')}>
                     <ThemePicker/>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className="text-sm text-soft">Idioma / Language</span>
+                        <select
+                            value={lang}
+                            onChange={(e) => setLang(e.target.value as Lang)}
+                            className="rounded-lg border border-edge bg-input px-2 py-1.5 text-sm text-ink outline-none"
+                        >
+                            <option value="pt-BR">Português (BR)</option>
+                            <option value="en">English</option>
+                        </select>
+                    </div>
                 </Section>
 
-                <Section title="Segurança">
-                    <label className="mb-1.5 block text-xs font-medium text-mut">Bloqueio automático</label>
+                <Section title={t('settings.security')}>
+                    <label className="mb-1.5 block text-xs font-medium text-mut">{t('settings.autolock')}</label>
                     <select
                         value={autolockMinutes}
                         onChange={(e) => void setAutolockMinutes(Number(e.target.value)).catch(async (err) => toast.error(await errorMessage(err)))}
@@ -126,44 +147,64 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                     >
                         {AUTOLOCK_OPTIONS.map((o) => (
                             <option key={o.value} value={o.value}>
-                                {o.label}
+                                {t(o.labelKey)}
                             </option>
                         ))}
                     </select>
                     <p className="mt-1.5 text-xs text-faint">
-                        O cofre bloqueia após o tempo de inatividade. Ao minimizar a janela, bloqueia imediatamente.
+                        {t('settings.autolockHint')}
                     </p>
+
+                    <label className="mt-3 flex cursor-pointer items-center justify-between gap-3">
+                        <span className="text-sm text-soft">{t('settings.trayClose')}</span>
+                        <input
+                            type="checkbox"
+                            checked={closeToTray}
+                            onChange={(e) => void setCloseToTray(e.target.checked).catch(async (err) => toast.error(await errorMessage(err)))}
+                            className="h-4 w-4 accent-indigo-500"
+                        />
+                    </label>
+
+                    <label className="mt-3 flex cursor-pointer items-center justify-between gap-3" title="Ctrl+Shift+Space">
+                        <span className="text-sm text-soft">{t('settings.quickAccess')}</span>
+                        <input
+                            type="checkbox"
+                            checked={quickAccess}
+                            onChange={(e) => void setQuickAccess(e.target.checked).catch(async (err) => toast.error(await errorMessage(err)))}
+                            className="h-4 w-4 accent-indigo-500"
+                        />
+                    </label>
 
                     {!changePw ? (
                         <Button variant="subtle" className="mt-3 w-full" onClick={() => setChangePw(true)}>
-                            Alterar senha mestra
+                            {t('settings.changePw')}
                         </Button>
                     ) : (
                         <div className="mt-3 space-y-3 rounded-lg border border-edge bg-input p-3">
-                            <RevealInput label="Senha atual" value={oldPassword} onChange={setOldPassword}/>
-                            <RevealInput label="Nova senha" value={newPassword} onChange={setNewPassword}/>
-                            <Input label="Confirme a nova senha" type="password" value={confirm} onChange={setConfirm}/>
+                            <RevealInput label={t('settings.currentPw')} value={oldPassword} onChange={setOldPassword}/>
+                            <RevealInput label={t('settings.newPw')} value={newPassword} onChange={setNewPassword}/>
+                            <Input label={t('settings.confirmNewPw')} type="password" value={confirm} onChange={setConfirm}/>
                             <div className="flex justify-end gap-2">
                                 <Button variant="ghost" onClick={() => setChangePw(false)}>
                                     Cancelar
                                 </Button>
                                 <Button onClick={() => void changePassword()} disabled={loading}>
-                                    {loading ? 'Alterando...' : 'Confirmar'}
+                                    {loading ? t('settings.changing') : t('settings.change')}
                                 </Button>
                             </div>
                         </div>
                     )}
                 </Section>
 
-                <Section title="Backups">
+                <Section title={t('settings.backups')}>
                     <p className="mb-2 text-xs text-faint">
-                        Backup diário automático ao desbloquear. Arquivos em <span className="font-mono">backups/</span> dentro da pasta de cofres (mantidos os 10 mais recentes).
+                        {t('settings.backupsHint').split('backups/')[0]}<span className="font-mono">backups/</span>{t('settings.backupsHint').split('backups/')[1] ?? ''}
                     </p>
                     <Button variant="subtle" className="w-full" onClick={() => void doBackup()} disabled={backingUp}>
-                        {backingUp ? 'Salvando...' : 'Fazer backup agora'}
+                        {backingUp ? t('settings.backingUp') : t('settings.backupNow')}
                     </Button>
 
-                    <label className="mb-1.5 mt-3 block text-xs font-medium text-mut">Manter itens na lixeira</label>
+                    <label className="mb-1.5 mt-3 block text-xs font-medium text-mut">{t('settings.trashKeep')}</label>
                     <select
                         value={trashDays}
                         onChange={(e) => void setTrashDays(Number(e.target.value)).catch(async (err) => toast.error(await errorMessage(err)))}
@@ -171,22 +212,21 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                     >
                         {[7, 14, 30, 60, 90].map((d) => (
                             <option key={d} value={d}>
-                                {d} dias
+                                {d} {t('settings.days')}
                             </option>
                         ))}
                     </select>
                 </Section>
 
-                <Section title="Sobre">
+                <Section title={t('settings.about')}>
                     <p className="text-sm text-soft">
-                        <span className="font-semibold text-ink">CipherSync</span> v0.4.0 — gerenciador de senhas
-                        open-source. Dados criptografados com AES-256-GCM + Argon2id.
+                        <span className="font-semibold text-ink">CipherSync</span> v0.4.0 — {t('settings.aboutText')}
                     </p>
                 </Section>
 
-                <Section title="Zona de perigo">
+                <Section title={t('settings.danger')}>
                     <p className="mb-2 text-xs text-faint">
-                        Apaga todos os cofres e itens permanentemente, resetando o aplicativo. Esta ação não pode ser desfeita.
+                        {t('settings.dangerDesc')}
                     </p>
                     {!confirmingDelete ? (
                         <Button
@@ -194,12 +234,12 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                             className="w-full border border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/20"
                             onClick={() => setConfirmingDelete(true)}
                         >
-                            Excluir conta e todos os dados
+                            {t('settings.deleteAccount')}
                         </Button>
                     ) : (
                         <div className="space-y-3 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
                             <p className="text-xs text-red-300">
-                                Para confirmar, digite <span className="font-bold">DELETAR TUDO</span> abaixo.
+                                {t('settings.deleteConfirm').split('DELETAR TUDO')[0]}<span className="font-bold">DELETAR TUDO</span>{t('settings.deleteConfirm').split('DELETAR TUDO')[1] ?? ''}
                             </p>
                             <Input
                                 value={confirmText}
@@ -219,7 +259,7 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                                     disabled={confirmText !== 'DELETAR TUDO' || deleting}
                                     onClick={() => void doDeleteAccount()}
                                 >
-                                    {deleting ? 'Apagando...' : 'Apagar permanentemente'}
+                                    {deleting ? t('settings.deleting') : t('settings.deleteForever')}
                                 </Button>
                             </div>
                         </div>

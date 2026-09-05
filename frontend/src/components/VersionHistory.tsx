@@ -4,18 +4,21 @@ import {History, RotateCcw} from 'lucide-react'
 import {api, errorMessage} from '../lib/api'
 import {useApp} from '../state'
 import {Button, Modal} from './ui'
+import {useT} from '../lib/locales'
 import type {Item, VersionEntry} from '../lib/types'
 import {FIELD_LABELS} from '../lib/fields'
 
-function diffLabels(current: Item, old: Item): {label: string; old: string; current: string}[] {
+type TFn = (key: string) => string
+
+function diffLabels(t: TFn, current: Item, old: Item): {label: string; old: string; current: string}[] {
     const out: {label: string; old: string; current: string}[] = []
     const simple: [keyof Item, string][] = [
-        ['title', 'Título'],
-        ['username', 'Usuário'],
-        ['password', 'Senha'],
-        ['url', 'URL'],
-        ['notes', 'Notas'],
-        ['category', 'Categoria'],
+        ['title', t('import.fieldTitle')],
+        ['username', t('import.fieldUsername')],
+        ['password', t('import.fieldPassword')],
+        ['url', t('import.fieldUrl')],
+        ['notes', t('import.fieldNotes')],
+        ['category', t('import.fieldCategory')],
     ]
     for (const [key, label] of simple) {
         if ((current[key] ?? '') !== (old[key] ?? '')) {
@@ -30,18 +33,21 @@ function diffLabels(current: Item, old: Item): {label: string; old: string; curr
         const a = old.fields?.[k] ?? ''
         const b = current.fields?.[k] ?? ''
         if (a !== b) {
-            out.push({label: FIELD_LABELS[k] ?? k, old: a, current: b})
+            const fk = `field.${k}` as Parameters<TFn>[0]
+            out.push({label: t(fk) !== fk ? t(fk) : (FIELD_LABELS[k] ?? k), old: a, current: b})
         }
     }
     const currentTags = (current.tags ?? []).join(', ')
     const oldTags = (old.tags ?? []).join(', ')
     if (currentTags !== oldTags) {
-        out.push({label: 'Tags', old: oldTags, current: currentTags})
+        out.push({label: t('main.tags'), old: oldTags, current: currentTags})
     }
     return out
 }
 
 export function VersionHistoryModal({itemId, onClose}: {itemId: string; onClose: () => void}) {
+    const t = useT()
+    const lang = useApp((s) => s.lang)
     const [versions, setVersions] = useState<VersionEntry[] | null>(null)
     const [selected, setSelected] = useState<VersionEntry | null>(null)
     const [restoring, setRestoring] = useState(false)
@@ -67,7 +73,7 @@ export function VersionHistoryModal({itemId, onClose}: {itemId: string; onClose:
         setRestoring(true)
         try {
             await restoreVersion(selected.id)
-            toast.success('Versão restaurada')
+            toast.success(t('history.restored'))
             onClose()
         } catch (err) {
             toast.error(await errorMessage(err))
@@ -77,13 +83,13 @@ export function VersionHistoryModal({itemId, onClose}: {itemId: string; onClose:
     }
 
     return (
-        <Modal title="Histórico de versões" onClose={onClose} width="max-w-3xl">
+        <Modal title={t('history.title')} onClose={onClose} width="max-w-3xl">
             {!versions ? (
-                <p className="py-8 text-center text-sm text-mut">Carregando...</p>
+                <p className="py-8 text-center text-sm text-mut">{t('history.loading')}</p>
             ) : versions.length === 0 ? (
                 <p className="flex flex-col items-center gap-3 py-8 text-center text-sm text-mut">
                     <History size={28} className="text-faint"/>
-                    Nenhuma versão anterior. Edite o item para começar a registrar o histórico.
+                    {t('history.empty')}
                 </p>
             ) : (
                 <div className="flex gap-5">
@@ -96,7 +102,7 @@ export function VersionHistoryModal({itemId, onClose}: {itemId: string; onClose:
                                     selected?.id === v.id ? 'bg-accent/15 text-accent' : 'text-mut hover:bg-hover'
                                 }`}
                             >
-                                <div className="font-medium">{new Date(v.timestamp).toLocaleString('pt-BR')}</div>
+                                <div className="font-medium">{new Date(v.timestamp).toLocaleString(lang === 'en' ? 'en-US' : 'pt-BR')}</div>
                                 <div className="mt-0.5 text-[11px] opacity-70">v{v.timestamp}</div>
                             </button>
                         ))}
@@ -105,10 +111,10 @@ export function VersionHistoryModal({itemId, onClose}: {itemId: string; onClose:
                     <div className="min-w-0 flex-1">
                         {selected && current ? (
                             <div className="space-y-2">
-                                {diffLabels(current, selected.item).length === 0 && (
-                                    <p className="text-sm text-mut">Sem diferenças com a versão atual.</p>
+                                {diffLabels(t, current, selected.item).length === 0 && (
+                                    <p className="text-sm text-mut">{t('history.noDiff')}</p>
                                 )}
-                                {diffLabels(current, selected.item).map((d, i) => (
+                                {diffLabels(t, current, selected.item).map((d, i) => (
                                     <div key={i} className="rounded-lg border border-edge bg-input p-3">
                                         <div className="mb-1 text-xs font-semibold text-mut">{d.label}</div>
                                         <div className="text-sm">
@@ -127,12 +133,12 @@ export function VersionHistoryModal({itemId, onClose}: {itemId: string; onClose:
                                         variant="subtle"
                                         className="w-full"
                                     >
-                                        <RotateCcw size={15}/> Restaurar esta versão
+                                        <RotateCcw size={15}/> {t('history.restore')}
                                     </Button>
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-sm text-mut">Selecione uma versão.</p>
+                            <p className="text-sm text-mut">{t('history.select')}</p>
                         )}
                     </div>
                 </div>

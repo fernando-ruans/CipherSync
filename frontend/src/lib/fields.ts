@@ -14,11 +14,13 @@ export const ITEM_TYPES: {value: ItemType; label: string}[] = [
     {value: 'note', label: 'Nota segura'},
     {value: 'credit_card', label: 'Cartão de crédito'},
     {value: 'identity', label: 'Identidade'},
+    {value: 'passkey', label: 'Passkey'},
 ]
 
 export const TYPE_FIELDS: Record<ItemType, FieldDef[]> = {
     login: [],
     note: [],
+    passkey: [],
     credit_card: [
         {key: 'cardholder', label: 'Nome no cartão'},
         {key: 'number', label: 'Número do cartão', card: true, placeholder: '1234 5678 9012 3456'},

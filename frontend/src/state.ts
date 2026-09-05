@@ -1,6 +1,8 @@
 import {create} from 'zustand'
 import {api} from './lib/api'
 import type {Item, ItemType, Phase, VaultInfo} from './lib/types'
+import {getLang, setLang as persistLang, type Lang} from './lib/langStore'
+import {translate} from './lib/locales'
 
 // Module-level dirty guard: ItemDetail registers which item has unsaved
 // edits so navigation actions can ask for confirmation first.
@@ -28,9 +30,12 @@ interface AppState {
     trashView: boolean
     trash: Item[]
     trashDays: number
+    lang: Lang
     favicons: Record<string, string>
     breachedIds: string[]
     autolockMinutes: number
+    closeToTray: boolean
+    quickAccess: boolean
     defaultType: ItemType
     init: () => Promise<void>
     newVault: () => void
@@ -41,6 +46,8 @@ interface AppState {
     deleteAccount: () => Promise<void>
     loadSettings: () => Promise<void>
     setAutolockMinutes: (minutes: number) => Promise<void>
+    setCloseToTray: (enabled: boolean) => Promise<void>
+    setQuickAccess: (enabled: boolean) => Promise<void>
     setSearch: (s: string) => void
     setCategory: (c: string) => void
     setTag: (t: string) => void
@@ -51,6 +58,7 @@ interface AppState {
     purgeSelected: () => Promise<void>
     emptyTrash: () => Promise<void>
     setTrashDays: (days: number) => Promise<void>
+    setLang: (lang: Lang) => void
     selectItem: (id: string | null) => void
     setFavicon: (domain: string, dataUri: string) => void
     setBreachedIds: (ids: string[]) => void
@@ -83,9 +91,12 @@ export const useApp = create<AppState>((set, get) => ({
     trashView: false,
     trash: [],
     trashDays: 30,
+    lang: getLang(),
     favicons: {},
     breachedIds: [],
     autolockMinutes: 5,
+    closeToTray: true,
+    quickAccess: true,
     defaultType: 'login',
 
     init: async () => {
@@ -173,6 +184,8 @@ export const useApp = create<AppState>((set, get) => ({
                 autolockMinutes: isNaN(minutes) ? 5 : minutes,
                 defaultType: (s['default_type'] as ItemType) || 'login',
                 trashDays: isNaN(trashDays) ? 30 : trashDays,
+                closeToTray: (s['close_to_tray'] ?? '1') !== '0',
+                quickAccess: (s['quick_access'] ?? '1') !== '0',
             })
         } catch {
             // vault not unlocked yet; ignore
@@ -184,9 +197,24 @@ export const useApp = create<AppState>((set, get) => ({
         set({autolockMinutes: minutes})
     },
 
+    setCloseToTray: async (enabled) => {
+        await api.setCloseToTray(enabled)
+        set({closeToTray: enabled})
+    },
+
+    setQuickAccess: async (enabled) => {
+        await api.setQuickAccess(enabled)
+        set({quickAccess: enabled})
+    },
+
     setTrashDays: async (days) => {
         await api.setTrashDays(days)
         set({trashDays: days})
+    },
+
+    setLang: (lang: Lang) => {
+        persistLang(lang)
+        set({lang})
     },
 
     setSearch: (search) => set({search}),
@@ -242,7 +270,7 @@ export const useApp = create<AppState>((set, get) => ({
         const blank: Item = {
             id: '',
             type: 'login',
-            title: 'Novo item',
+            title: translate(get().lang, 'detail.noTitle'),
             username: '',
             password: '',
             url: '',

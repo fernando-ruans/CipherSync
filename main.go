@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"embed"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend/dist
@@ -14,6 +16,9 @@ var assets embed.FS
 func main() {
 	// Create an instance of the app structure
 	app := NewApp()
+
+	// System tray runs isolated: both Wails and systray want the main OS thread.
+	go runTray(app)
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -30,8 +35,20 @@ func main() {
 		Bind: []interface{}{
 			app,
 		},
+		// X button: hide to tray (if enabled in settings) instead of quitting.
+		// The tray menu always offers Sair to really quit.
+		OnBeforeClose: func(ctx context.Context) bool {
+			if app.closeToTray() {
+				runtime.WindowHide(ctx)
+				return true
+			}
+			return false
+		},
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "ciphersync-single-instance",
+			OnSecondInstanceLaunch: func(_ options.SecondInstanceData) {
+				runtime.WindowShow(app.ctx)
+			},
 		},
 	})
 

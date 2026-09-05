@@ -3,11 +3,13 @@ import toast from 'react-hot-toast'
 import {Camera, CheckCircle2, ImagePlus, KeyRound, Loader2} from 'lucide-react'
 import jsQR from 'jsqr'
 import {api, errorMessage} from '../lib/api'
+import {useT} from '../lib/locales'
 import {Button, Input, Modal} from './ui'
 
 type Tab = 'camera' | 'upload' | 'manual'
 
 function CodePreview({secret, onSave}: {secret: string; onSave: (s: string) => void}) {
+    const t = useT()
     const [code, setCode] = useState('')
     const [remaining, setRemaining] = useState(0)
     const [saving, setSaving] = useState(false)
@@ -46,16 +48,16 @@ function CodePreview({secret, onSave}: {secret: string; onSave: (s: string) => v
         <div className="rounded-xl border border-edge bg-input p-4">
             <div className="flex items-center justify-between">
                 <div>
-                    <div className="text-xs font-medium text-mut">Chave detectada</div>
+                    <div className="text-xs font-medium text-mut">{t('totp.detected')}</div>
                     <div className="mt-1 font-mono text-sm text-accent">{secret}</div>
                 </div>
                 <div className="text-center">
                     <div className="font-mono text-3xl font-bold tracking-widest text-ink">{code}</div>
-                    <div className="text-[11px] text-faint">atualiza em {remaining}s</div>
+                    <div className="text-[11px] text-faint">{t('totp.updatesIn', {n: remaining})}</div>
                 </div>
             </div>
             <Button className="mt-4 w-full" onClick={() => void save()} disabled={saving}>
-                {saving ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>} Salvar 2FA
+                {saving ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>} {t('totp.save2fa')}
             </Button>
         </div>
     )
@@ -65,6 +67,7 @@ export function TOTPSetupModal({onClose, onSave}: {
     onClose: () => void
     onSave: (secret: string) => Promise<void>
 }) {
+    const t = useT()
     const [tab, setTab] = useState<Tab>('camera')
     const [secret, setSecret] = useState('')
     const videoRef = useRef<HTMLVideoElement>(null)
@@ -85,7 +88,7 @@ export function TOTPSetupModal({onClose, onSave}: {
             setSecret(s)
             cancelAnimationFrame(rafRef.current)
             streamRef.current?.getTracks().forEach((t) => t.stop())
-            toast.success('QR code reconhecido!')
+            toast.success(t('totp.qrOk'))
         } catch (err) {
             toast.error(await errorMessage(err))
         }
@@ -134,7 +137,7 @@ export function TOTPSetupModal({onClose, onSave}: {
                 }
                 rafRef.current = requestAnimationFrame(scanFrame)
             } catch {
-                toast.error('Não foi possível acessar a câmera')
+                toast.error(t('totp.noCamera'))
                 setTab('upload')
             }
         }
@@ -162,14 +165,14 @@ export function TOTPSetupModal({onClose, onSave}: {
             const qr = jsQR(imgData.data, canvas.width, canvas.height)
             URL.revokeObjectURL(url)
             if (!qr) {
-                toast.error('Nenhum QR code encontrado na imagem')
+                toast.error(t('totp.noQR'))
                 return
             }
             void ingest(qr.data)
         }
         img.onerror = () => {
             URL.revokeObjectURL(url)
-            toast.error('Não foi possível ler a imagem')
+            toast.error(t('totp.badImage'))
         }
         img.src = url
     }
@@ -177,34 +180,34 @@ export function TOTPSetupModal({onClose, onSave}: {
     async function verifyManual() {
         try {
             await api.validateTOTPSecret(secret)
-            toast.success('Chave válida')
+            toast.success(t('totp.validKey'))
         } catch (err) {
             toast.error(await errorMessage(err))
         }
     }
 
     const tabs: {value: Tab; label: string; icon: React.ReactNode}[] = [
-        {value: 'camera', label: 'Câmera', icon: <Camera size={14}/>},
-        {value: 'upload', label: 'Upload', icon: <ImagePlus size={14}/>},
-        {value: 'manual', label: 'Chave manual', icon: <KeyRound size={14}/>},
+        {value: 'camera', label: t('totp.camera'), icon: <Camera size={14}/>},
+        {value: 'upload', label: t('totp.upload'), icon: <ImagePlus size={14}/>},
+        {value: 'manual', label: t('totp.manual'), icon: <KeyRound size={14}/>},
     ]
 
     return (
-        <Modal title="Adicionar 2FA" onClose={onClose}>
+        <Modal title={t('totp.title')} onClose={onClose}>
             <p className="mb-4 text-sm text-mut">
-                Escaneie o QR code do serviço (ex: GitHub, Google) com a câmera ou envie um screenshot.
+                {t('totp.desc')}
             </p>
 
             <div className="mb-4 flex rounded-lg border border-edge bg-input p-1">
-                {tabs.map((t) => (
+                {tabs.map((tb) => (
                     <button
-                        key={t.value}
-                        onClick={() => setTab(t.value)}
+                        key={tb.value}
+                        onClick={() => setTab(tb.value)}
                         className={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                            tab === t.value ? 'bg-indigo-500 text-white' : 'text-mut hover:text-ink'
+                            tab === tb.value ? 'bg-indigo-500 text-white' : 'text-mut hover:text-ink'
                         }`}
                     >
-                        {t.icon} {t.label}
+                        {tb.icon} {tb.label}
                     </button>
                 ))}
             </div>
@@ -216,7 +219,7 @@ export function TOTPSetupModal({onClose, onSave}: {
                         <div className="h-40 w-40 rounded-xl border-2 border-indigo-400/70"/>
                     </div>
                     <p className="absolute bottom-3 left-0 right-0 text-center text-xs text-white/80">
-                        Aponte para o QR code
+                        {t('totp.pointCamera')}
                     </p>
                 </div>
             )}
@@ -225,7 +228,7 @@ export function TOTPSetupModal({onClose, onSave}: {
                 <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-edge bg-input py-10">
                     <ImagePlus size={28} className="text-faint"/>
                     <Button variant="subtle" onClick={() => fileRef.current?.click()}>
-                        Selecionar screenshot
+                        {t('totp.selectShot')}
                     </Button>
                     <input
                         ref={fileRef}
@@ -244,13 +247,13 @@ export function TOTPSetupModal({onClose, onSave}: {
             {!secret && tab === 'manual' && (
                 <div className="space-y-3">
                     <Input
-                        label="Chave secreta (base32)"
+                        label={t('totp.secretLabel')}
                         value={secret}
                         onChange={setSecret}
-                        placeholder="JBSWY3DPEHPK3PXP"
+                        placeholder={t('totp.secretPh')}
                     />
                     <Button variant="subtle" className="w-full" onClick={() => void verifyManual()} disabled={!secret.trim()}>
-                        Verificar chave
+                        {t('totp.verify')}
                     </Button>
                 </div>
             )}
@@ -258,7 +261,7 @@ export function TOTPSetupModal({onClose, onSave}: {
             {secret && <CodePreview secret={secret} onSave={onSave}/>}
 
             <div className="mt-4 flex justify-end">
-                <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+                <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
             </div>
         </Modal>
     )

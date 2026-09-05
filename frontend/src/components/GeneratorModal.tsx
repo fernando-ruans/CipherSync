@@ -3,6 +3,7 @@ import toast from 'react-hot-toast'
 import {Copy, Dices, RefreshCw} from 'lucide-react'
 import {api, errorMessage} from '../lib/api'
 import {safeCopy} from '../lib/util'
+import {useT} from '../lib/locales'
 import {Button, IconButton, Modal} from './ui'
 import type {PasswordOptions} from '../lib/types'
 
@@ -38,6 +39,7 @@ export function GeneratorModal({
     const [words, setWords] = useState(4)
     const [value, setValue] = useState('')
     const [loading, setLoading] = useState(false)
+    const t = useT()
 
     async function generate() {
         setLoading(true)
@@ -67,17 +69,17 @@ export function GeneratorModal({
     }
 
     return (
-        <Modal title="Gerador de senhas" onClose={onClose}>
+        <Modal title={t('gen.title')} onClose={onClose}>
             <div className="mb-4 flex rounded-lg border border-edge bg-input p-1">
-                {(['char', 'words'] as const).map((t) => (
+                {(['char', 'words'] as const).map((tabKey) => (
                     <button
-                        key={t}
-                        onClick={() => setTab(t)}
+                        key={tabKey}
+                        onClick={() => setTab(tabKey)}
                         className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
-                            tab === t ? 'bg-indigo-500 text-white' : 'text-mut hover:text-ink'
+                            tab === tabKey ? 'bg-indigo-500 text-white' : 'text-mut hover:text-ink'
                         }`}
                     >
-                        {t === 'char' ? 'Aleatória' : 'Frase (palavras)'}
+                        {tabKey === 'char' ? t('gen.random') : t('gen.words')}
                     </button>
                 ))}
             </div>
@@ -88,31 +90,31 @@ export function GeneratorModal({
                         <button
                             type="button"
                             onClick={() => setOpts({...pinOpts, length: 4})}
-                            title="PIN de 4 dígitos (só números)"
+                            title={t('gen.pin4Hint')}
                             className="flex-1 rounded-lg border border-edge bg-input px-3 py-2 text-xs font-medium text-mut hover:bg-hover hover:text-ink"
                         >
-                            PIN (4 dígitos)
+                            {t('gen.pin4')}
                         </button>
                         <button
                             type="button"
                             onClick={() => setOpts({...pinOpts, length: 6})}
-                            title="PIN de 6 dígitos (só números)"
+                            title={t('gen.pin6Hint')}
                             className="flex-1 rounded-lg border border-edge bg-input px-3 py-2 text-xs font-medium text-mut hover:bg-hover hover:text-ink"
                         >
-                            PIN (6 dígitos)
+                            {t('gen.pin6')}
                         </button>
                         <button
                             type="button"
                             onClick={() => setOpts(defaultOpts)}
-                            title="Senha completa aleatória"
+                            title={t('gen.strongHint')}
                             className="flex-1 rounded-lg border border-edge bg-input px-3 py-2 text-xs font-medium text-mut hover:bg-hover hover:text-ink"
                         >
-                            Senha forte
+                            {t('gen.strong')}
                         </button>
                     </div>
                     <div>
                         <div className="mb-1.5 flex justify-between text-xs">
-                            <span className="font-medium text-mut">Comprimento</span>
+                            <span className="font-medium text-mut">{t('gen.length')}</span>
                             <span className="font-semibold text-ink">{opts.length}</span>
                         </div>
                         <input
@@ -127,10 +129,10 @@ export function GeneratorModal({
                     <div className="grid grid-cols-2 gap-2">
                         {(
                             [
-                                ['useUpper', 'Letras maiúsculas'],
-                                ['useLower', 'Letras minúsculas'],
-                                ['useDigits', 'Números'],
-                                ['useSymbols', 'Símbolos'],
+                                ['useUpper', t('gen.upper')],
+                                ['useLower', t('gen.lower')],
+                                ['useDigits', t('gen.digits')],
+                                ['useSymbols', t('gen.symbols')],
                             ] as const
                         ).map(([key, label]) => (
                             <label
@@ -154,14 +156,14 @@ export function GeneratorModal({
                             onChange={(e) => setOpts({...opts, excludeAmbiguous: e.target.checked})}
                             className="accent-indigo-500"
                         />
-                        Excluir caracteres ambíguos (i, l, 1, o, 0)
+                        {t('gen.noAmbiguous')}
                     </label>
                 </div>
             ) : (
                 <div className="space-y-4">
                     <div>
                         <div className="mb-1.5 flex justify-between text-xs">
-                            <span className="font-medium text-mut">Número de palavras</span>
+                            <span className="font-medium text-mut">{t('gen.wordCount')}</span>
                             <span className="font-semibold text-ink">{words}</span>
                         </div>
                         <input
@@ -174,7 +176,7 @@ export function GeneratorModal({
                         />
                     </div>
                     <p className="text-xs text-mut">
-                        Frases com 4+ palavras são difíceis de quebrar e fáceis de lembrar.
+                        {t('gen.wordsHint')}
                     </p>
                 </div>
             )}
@@ -185,10 +187,10 @@ export function GeneratorModal({
                         <div className="truncate font-mono text-sm text-accent">{value}</div>
                     </div>
                     <div className="flex shrink-0 gap-1">
-                        <IconButton onClick={() => void copy()} title="Copiar">
+                        <IconButton onClick={() => void copy()} title={t('gen.copy')}>
                             <Copy size={15}/>
                         </IconButton>
-                        <IconButton onClick={() => void generate()} title="Gerar novamente">
+                        <IconButton onClick={() => void generate()} title={t('gen.regen')}>
                             <RefreshCw size={15} className={loading ? 'animate-spin' : ''}/>
                         </IconButton>
                     </div>
@@ -197,15 +199,15 @@ export function GeneratorModal({
 
             <div className="mt-5 flex justify-end gap-2">
                 <Button variant="ghost" onClick={onClose}>
-                    Cancelar
+                    {t('common.cancel')}
                 </Button>
                 <Button
                     variant="subtle"
                     onClick={() => void generate()}
                 >
-                    <Dices size={16}/> Gerar
+                    <Dices size={16}/> {t('common.generate')}
                 </Button>
-                <Button onClick={() => onUse(value)}>Usar senha</Button>
+                <Button onClick={() => onUse(value)}>{t('gen.use')}</Button>
             </div>
         </Modal>
     )

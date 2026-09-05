@@ -1,7 +1,8 @@
 import {ReactNode} from 'react'
 import {Eye, EyeOff, X} from 'lucide-react'
 import {useEffect, useRef, useState} from 'react'
-import {scoreColor, scoreLabel, passwordScore} from '../lib/password'
+import {scoreColor, passwordScore} from '../lib/password'
+import {useT} from '../lib/locales'
 
 // Stack of mounted modal closers (topmost last). Only the topmost modal
 // handles Escape, so stacked modals close one at a time.
@@ -142,6 +143,7 @@ export function RevealInput({
 }
 
 export function StrengthMeter({password}: {password: string}) {
+    const t = useT()
     const score = passwordScore(password)
     if (!password) return null
     return (
@@ -158,7 +160,7 @@ export function StrengthMeter({password}: {password: string}) {
                 ))}
             </div>
             <div className="mt-1 text-xs" style={{color: scoreColor(score)}}>
-                {scoreLabel(score)}
+                {t(`strength.${score}`)}
             </div>
         </div>
     )
@@ -194,12 +196,13 @@ export function Modal({
             window.removeEventListener('keydown', onKey, true)
         }
     }, [])
+    const t = useT()
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
             <div className={`w-full ${width} rounded-2xl border border-edge bg-surface shadow-2xl`}>
                 <div className="flex items-center justify-between border-b border-edge px-5 py-4">
                     <h2 className="text-sm font-semibold text-ink">{title}</h2>
-                    <IconButton onClick={onClose} title="Fechar">
+                    <IconButton onClick={onClose} title={t('common.close')}>
                         <X size={16}/>
                     </IconButton>
                 </div>

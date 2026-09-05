@@ -12,6 +12,8 @@ export function BackupNow():Promise<string>;
 
 export function ChangeMasterPassword(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function CloseQuickAccess():Promise<void>;
+
 export function CopyToClipboard(arg1:string):Promise<void>;
 
 export function CreateItem(arg1:main.Item):Promise<main.Item>;
@@ -96,7 +98,11 @@ export function SetAutolockMinutes(arg1:number):Promise<void>;
 
 export function SetCategoryBatch(arg1:Array<string>,arg2:string):Promise<void>;
 
+export function SetCloseToTray(arg1:boolean):Promise<void>;
+
 export function SetFavoriteBatch(arg1:Array<string>,arg2:boolean):Promise<void>;
+
+export function SetQuickAccess(arg1:boolean):Promise<void>;
 
 export function SetSetting(arg1:string,arg2:string):Promise<void>;
 

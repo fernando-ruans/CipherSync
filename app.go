@@ -29,7 +29,14 @@ type App struct {
 	vaultName string
 	clipMu    sync.Mutex
 	clipStop  chan struct{}
+	qaMu      sync.Mutex
+	qaOpen    bool
+	qaPrevW   int
+	qaPrevH   int
+	qaHotkey  bool
 }
+
+var errQuickAccessUnsupported = errors.New("quick access disponível apenas no Windows")
 
 // NewApp creates a new App application struct.
 func NewApp() *App {
@@ -40,6 +47,108 @@ func NewApp() *App {
 // so we can call the runtime methods.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// Global hotkey is ON by default; OpenVault re-checks the vault setting.
+	a.qaMu.Lock()
+	_ = a.enableQuickAccessHotkey()
+	a.qaMu.Unlock()
+}
+
+// ---------- Quick Access (global hotkey popup) ----------
+
+// enableQuickAccessHotkey registers Ctrl+Shift+Space once and starts the
+// listener loop. Caller must hold qaMu.
+func (a *App) enableQuickAccessHotkey() error {
+	if a.qaHotkey {
+		return nil
+	}
+	if err := registerQuickAccessHotkey(); err != nil {
+		return err
+	}
+	a.qaHotkey = true
+	go quickAccessLoop(func() {
+		a.openQuickAccess()
+	})
+	return nil
+}
+
+// disableQuickAccessHotkey unregisters the global hotkey.
+// Caller must hold qaMu.
+func (a *App) disableQuickAccessHotkey() {
+	if !a.qaHotkey {
+		return
+	}
+	unregisterQuickAccessHotkey()
+	a.qaHotkey = false
+}
+
+// SetQuickAccess enables/disables the global Ctrl+Shift+Space popup.
+func (a *App) SetQuickAccess(enabled bool) error {
+	v := a.currentVault()
+	if v == nil {
+		return ErrVaultLocked
+	}
+	val := "1"
+	if !enabled {
+		val = "0"
+	}
+	if err := v.setSetting("quick_access", val); err != nil {
+		return err
+	}
+	a.qaMu.Lock()
+	defer a.qaMu.Unlock()
+	if enabled {
+		return a.enableQuickAccessHotkey()
+	}
+	a.disableQuickAccessHotkey()
+	return nil
+}
+
+// openQuickAccess summons the mini search popup (or just shows the window
+// when locked). Called from the hotkey thread.
+func (a *App) openQuickAccess() {
+	if a.ctx == nil {
+		return
+	}
+	if !a.IsUnlocked() {
+		runtime.WindowShow(a.ctx)
+		runtime.WindowUnminimise(a.ctx)
+		return
+	}
+	a.qaMu.Lock()
+	if a.qaOpen {
+		a.qaMu.Unlock()
+		runtime.WindowShow(a.ctx)
+		return
+	}
+	w, h := runtime.WindowGetSize(a.ctx)
+	a.qaPrevW, a.qaPrevH = w, h
+	a.qaOpen = true
+	a.qaMu.Unlock()
+
+	runtime.WindowShow(a.ctx)
+	runtime.WindowUnminimise(a.ctx)
+	runtime.WindowSetAlwaysOnTop(a.ctx, true)
+	runtime.WindowSetSize(a.ctx, 560, 460)
+	runtime.WindowCenter(a.ctx)
+	runtime.EventsEmit(a.ctx, "quick-access-open")
+}
+
+// CloseQuickAccess restores the main window after the popup closes.
+func (a *App) CloseQuickAccess() {
+	a.qaMu.Lock()
+	open := a.qaOpen
+	w, h := a.qaPrevW, a.qaPrevH
+	a.qaOpen = false
+	a.qaMu.Unlock()
+	if a.ctx == nil {
+		return
+	}
+	runtime.WindowSetAlwaysOnTop(a.ctx, false)
+	if open && w > 0 && h > 0 {
+		runtime.WindowSetSize(a.ctx, w, h)
+		runtime.WindowCenter(a.ctx)
+	}
+	runtime.EventsEmit(a.ctx, "quick-access-close")
 }
 
 // currentVault returns the unlocked vault or nil (safe for goroutines).
@@ -146,6 +255,14 @@ func (a *App) OpenVault(file, password string) error {
 	go func() {
 		_, _ = a.autoBackup(v, file)
 	}()
+	// re-check the quick-access preference now that we can read settings
+	a.qaMu.Lock()
+	defer a.qaMu.Unlock()
+	if val, err := v.getSetting("quick_access"); err == nil && val == "0" {
+		a.disableQuickAccessHotkey()
+	} else {
+		_ = a.enableQuickAccessHotkey()
+	}
 	return nil
 }
 
@@ -528,7 +645,7 @@ func (a *App) GetSettings() (map[string]string, error) {
 		return nil, ErrVaultLocked
 	}
 	out := map[string]string{}
-	for _, key := range []string{"autolock_minutes", "default_type", "trash_days"} {
+	for _, key := range []string{"autolock_minutes", "default_type", "trash_days", "close_to_tray", "quick_access"} {
 		val, err := v.getSetting(key)
 		if err != nil {
 			return nil, err
@@ -544,6 +661,12 @@ func (a *App) GetSettings() (map[string]string, error) {
 	if out["trash_days"] == "" {
 		out["trash_days"] = strconv.Itoa(defaultTrashDays)
 	}
+	if out["close_to_tray"] == "" {
+		out["close_to_tray"] = "1"
+	}
+	if out["quick_access"] == "" {
+		out["quick_access"] = "1"
+	}
 	return out, nil
 }
 
@@ -554,6 +677,33 @@ func (a *App) SetSetting(key, value string) error {
 		return ErrVaultLocked
 	}
 	return v.setSetting(key, value)
+}
+
+// closeToTray reports whether closing the window should hide to tray.
+// Defaults to true when the vault is locked or the setting is absent.
+func (a *App) closeToTray() bool {
+	v := a.currentVault()
+	if v == nil {
+		return true
+	}
+	val, err := v.getSetting("close_to_tray")
+	if err != nil || val == "" {
+		return true
+	}
+	return val != "0"
+}
+
+// SetCloseToTray configures whether X hides to tray (true) or quits (false).
+func (a *App) SetCloseToTray(enabled bool) error {
+	v := a.currentVault()
+	if v == nil {
+		return ErrVaultLocked
+	}
+	val := "1"
+	if !enabled {
+		val = "0"
+	}
+	return v.setSetting("close_to_tray", val)
 }
 
 // SetAutolockMinutes configures the auto-lock timeout (0 = never).

@@ -4,21 +4,23 @@ import {FileUp, Loader2} from 'lucide-react'
 import {api, errorMessage} from '../lib/api'
 import {useApp} from '../state'
 import {Button, Input, Modal} from './ui'
+import {useT} from '../lib/locales'
 import type {FieldMapping, ImportResult, Item} from '../lib/types'
 
 type Format = 'auto' | 'bitwarden' | 'csv' | 'transfer' | 'keepass'
 
-const FIELDS = [
-    {value: 'ignore', label: 'Ignorar'},
-    {value: 'title', label: 'Título'},
-    {value: 'username', label: 'Usuário'},
-    {value: 'password', label: 'Senha'},
-    {value: 'url', label: 'URL'},
-    {value: 'notes', label: 'Notas'},
-    {value: 'category', label: 'Categoria'},
+const FIELDS: {value: string; labelKey: 'import.ignore' | 'import.fieldTitle' | 'import.fieldUsername' | 'import.fieldPassword' | 'import.fieldUrl' | 'import.fieldNotes' | 'import.fieldCategory'}[] = [
+    {value: 'ignore', labelKey: 'import.ignore'},
+    {value: 'title', labelKey: 'import.fieldTitle'},
+    {value: 'username', labelKey: 'import.fieldUsername'},
+    {value: 'password', labelKey: 'import.fieldPassword'},
+    {value: 'url', labelKey: 'import.fieldUrl'},
+    {value: 'notes', labelKey: 'import.fieldNotes'},
+    {value: 'category', labelKey: 'import.fieldCategory'},
 ]
 
 export function ImportModal({onClose}: {onClose: () => void}) {
+    const t = useT()
     const [format, setFormat] = useState<Format>('auto')
     const [fileName, setFileName] = useState('')
     const [transferPw, setTransferPw] = useState('')
@@ -67,7 +69,7 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                 setResult(await api.importAutoCSV(text))
             } else if (format === 'transfer') {
                 if (!transferPw) {
-                    toast.error('Digite a senha do arquivo de transferência')
+                    toast.error(t('import.needTransferPw'))
                     return
                 }
                 setResult(await api.importEncryptedTransfer(text.trim(), transferPw))
@@ -121,11 +123,11 @@ export function ImportModal({onClose}: {onClose: () => void}) {
 
     async function runKeePassImport() {
         if (!keepassB64) {
-            toast.error('Selecione o arquivo .kdbx')
+            toast.error(t('import.needKeepassFile'))
             return
         }
         if (!keepassPw) {
-            toast.error('Digite a senha do banco KeePass')
+            toast.error(t('import.needKeepassPw'))
             return
         }
         setLoading(true)
@@ -155,7 +157,7 @@ export function ImportModal({onClose}: {onClose: () => void}) {
         setLoading(true)
         try {
             const res = await importItems(result.preview)
-            toast.success(`Importados ${res.created} itens` + (res.skipped ? `, ${res.skipped} ignorados` : ''))
+            toast.success(t('import.done', {n: res.created}) + (res.skipped ? t('import.skipped', {n: res.skipped}) : ''))
             onClose()
         } catch (err) {
             toast.error(await errorMessage(err))
@@ -164,15 +166,15 @@ export function ImportModal({onClose}: {onClose: () => void}) {
         }
     }
     const formatOptions: {value: Format; label: string; hint: string}[] = [
-        {value: 'auto', label: 'CSV (Chrome / Firefox / LastPass / 1Password)', hint: 'Detecção automática de colunas'},
-        {value: 'bitwarden', label: 'Bitwarden JSON', hint: 'Exportação .json não criptografada (todos os tipos de item)'},
-        {value: 'keepass', label: 'KeePass (.kdbx)', hint: 'Banco KeePass v3/v4 com senha'},
-        {value: 'csv', label: 'CSV genérico', hint: 'Escolha manualmente o que cada coluna representa'},
-        {value: 'transfer', label: 'Transferência CipherSync', hint: 'Arquivo .passapp criptografado'},
+        {value: 'auto', label: 'CSV (Chrome / Firefox / LastPass / 1Password)', hint: t('import.csvAutoHint')},
+        {value: 'bitwarden', label: t('import.bitwarden'), hint: t('import.bitwardenHint')},
+        {value: 'keepass', label: t('import.keepass'), hint: t('import.keepassHint')},
+        {value: 'csv', label: t('import.csvGeneric'), hint: t('import.csvGenericHint')},
+        {value: 'transfer', label: t('import.transfer'), hint: t('import.transferHint')},
     ]
 
     return (
-        <Modal title="Importar itens" onClose={onClose}>
+        <Modal title={t('import.title')} onClose={onClose}>
             <div className="space-y-4">
                 <div className="flex flex-col gap-2">
                     {formatOptions.map((o) => (
@@ -200,7 +202,7 @@ export function ImportModal({onClose}: {onClose: () => void}) {
 
                 {format === 'transfer' && (
                     <Input
-                        label="Senha do arquivo de transferência"
+                        label={t('import.transferPw')}
                         type="password"
                         value={transferPw}
                         onChange={setTransferPw}
@@ -210,13 +212,13 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                 {format === 'keepass' && fileName && (
                     <div className="space-y-3">
                         <Input
-                            label="Senha do banco KeePass"
+                            label={t('import.keepassPw')}
                             type="password"
                             value={keepassPw}
                             onChange={setKeepassPw}
                         />
                         <Button variant="subtle" className="w-full" onClick={() => void runKeePassImport()} disabled={loading}>
-                            {loading ? <Loader2 size={16} className="animate-spin"/> : 'Analisar banco KeePass'}
+                            {loading ? <Loader2 size={16} className="animate-spin"/> : t('import.keepassAnalyze')}
                         </Button>
                     </div>
                 )}
@@ -234,12 +236,12 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                 />
                 <Button variant="subtle" className="w-full" onClick={() => fileRef.current?.click()} disabled={loading}>
                     {loading ? <Loader2 size={16} className="animate-spin"/> : <FileUp size={16}/>}
-                    {fileName ? `Selecionado: ${fileName}` : 'Selecionar arquivo'}
+                    {fileName ? `${t('import.selected')}: ${fileName}` : t('import.selectFile')}
                 </Button>
 
                 {headers.length > 0 && (
                     <div className="space-y-2">
-                        <p className="text-xs font-medium text-mut">Mapear colunas</p>
+                        <p className="text-xs font-medium text-mut">{t('import.mapColumns')}</p>
                         {headers.map((h, i) => (
                             <div key={i} className="flex items-center gap-2">
                                 <span className="w-40 truncate text-sm text-soft">{h}</span>
@@ -256,14 +258,14 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                                 >
                                     {FIELDS.map((f) => (
                                         <option key={f.value} value={f.value}>
-                                            {f.label}
+                                            {t(f.labelKey)}
                                         </option>
                                     ))}
                                 </select>
                             </div>
                         ))}
                         <Button variant="subtle" className="w-full" onClick={() => void runMappedImport()}>
-                            Analisar CSV
+                            {t('import.analyzeCsv')}
                         </Button>
                     </div>
                 )}
@@ -272,25 +274,25 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                     <div className="rounded-lg border border-edge bg-input p-4">
                         <div className="flex items-center justify-between">
                             <p className="text-sm text-soft">
-                                {result.preview.length} item(ns) pronto(s) para importar
+                                {result.preview.length} {t('import.ready')}
                             </p>
                             {result.preview.length === 0 && (
-                                <p className="text-xs text-faint">Nenhum dado válido encontrado.</p>
+                                <p className="text-xs text-faint">{t('import.noValid')}</p>
                             )}
                         </div>
                         <div className="mt-3 max-h-44 overflow-y-auto space-y-1">
                             {result.preview.slice(0, 50).map((it: Item, i) => (
                                 <div key={i} className="flex items-center justify-between rounded px-2 py-1 text-sm hover:bg-hover">
-                                    <span className="truncate text-soft">{it.title || 'Sem título'}</span>
+                                    <span className="truncate text-soft">{it.title || t('detail.noTitle')}</span>
                                     <span className="ml-2 shrink-0 text-xs text-faint">{it.username}</span>
                                 </div>
                             ))}
                             {result.preview.length > 50 && (
-                                <p className="px-2 text-xs text-faint">... e mais {result.preview.length - 50}</p>
+                                <p className="px-2 text-xs text-faint">{t('import.more', {n: result.preview.length - 50})}</p>
                             )}
                         </div>
                         <Button className="mt-3 w-full" onClick={() => void commit()} disabled={loading || result.preview.length === 0}>
-                            {loading ? <Loader2 size={16} className="animate-spin"/> : 'Confirmar importação'}
+                            {loading ? <Loader2 size={16} className="animate-spin"/> : t('import.confirm')}
                         </Button>
                     </div>
                 )}

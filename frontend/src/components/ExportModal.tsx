@@ -3,11 +3,13 @@ import toast from 'react-hot-toast'
 import {Download, Loader2} from 'lucide-react'
 import {api, errorMessage} from '../lib/api'
 import {Button, Input, Modal} from './ui'
+import {useT} from '../lib/locales'
 import {downloadFile} from '../lib/util'
 
 type Format = 'csv' | 'json' | 'transfer'
 
 export function ExportModal({onClose}: {onClose: () => void}) {
+    const t = useT()
     const [format, setFormat] = useState<Format>('csv')
     const [transferPw, setTransferPw] = useState('')
     const [confirmPw, setConfirmPw] = useState('')
@@ -19,23 +21,23 @@ export function ExportModal({onClose}: {onClose: () => void}) {
             if (format === 'csv') {
                 const content = await api.exportCSV()
                 downloadFile('ciphersync-export.csv', content, 'text/csv')
-                toast.success('Exportado como CSV')
+                toast.success(t('export.csvDone'))
             } else if (format === 'json') {
                 const content = await api.exportJSON()
                 downloadFile('ciphersync-export.json', content, 'application/json')
-                toast.success('Exportado como JSON')
+                toast.success(t('export.jsonDone'))
             } else {
                 if (transferPw.length < 8) {
-                    toast.error('Use uma senha de pelo menos 8 caracteres')
+                    toast.error(t('export.pwShort'))
                     return
                 }
                 if (transferPw !== confirmPw) {
-                    toast.error('As senhas não coincidem')
+                    toast.error(t('export.pwMismatch'))
                     return
                 }
                 const content = await api.exportEncryptedJSON(transferPw)
                 downloadFile('ciphersync-transfer.passapp', content, 'text/plain')
-                toast.success('Transferência criptografada gerada')
+                toast.success(t('export.transferDone'))
             }
             onClose()
         } catch (err) {
@@ -46,14 +48,14 @@ export function ExportModal({onClose}: {onClose: () => void}) {
     }
 
     return (
-        <Modal title="Exportar itens" onClose={onClose}>
+        <Modal title={t('export.title')} onClose={onClose}>
             <div className="space-y-4">
                 <div className="flex flex-col gap-2">
                     {(
                         [
-                            {value: 'csv', label: 'CSV', hint: 'Legível, abre em qualquer planilha'},
-                            {value: 'json', label: 'JSON (sem criptografia)', hint: 'Apenas para uso próprio'},
-                            {value: 'transfer', label: 'Transferência CipherSync', hint: 'Criptografado com senha, para outro CipherSync'},
+                            {value: 'csv', label: 'CSV', hint: t('export.csvHint')},
+                            {value: 'json', label: t('export.jsonLabel'), hint: t('export.jsonHint')},
+                            {value: 'transfer', label: t('export.transferLabel'), hint: t('export.transferHint')},
                         ] as const
                     ).map((o) => (
                         <button
@@ -75,19 +77,19 @@ export function ExportModal({onClose}: {onClose: () => void}) {
 
                 {format === 'json' && (
                     <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-400">
-                        Aviso: este arquivo contém as senhas em texto puro. Guarde com cuidado.
+                        {t('export.jsonWarn')}
                     </p>
                 )}
 
                 {format === 'transfer' && (
                     <div className="space-y-3">
-                        <Input label="Senha de proteção" type="password" value={transferPw} onChange={setTransferPw}/>
-                        <Input label="Confirme a senha" type="password" value={confirmPw} onChange={setConfirmPw}/>
+                        <Input label={t('export.transferPw')} type="password" value={transferPw} onChange={setTransferPw}/>
+                        <Input label={t('export.confirmPw')} type="password" value={confirmPw} onChange={setConfirmPw}/>
                     </div>
                 )}
 
                 <Button className="w-full" onClick={() => void doExport()} disabled={loading}>
-                    {loading ? <Loader2 size={16} className="animate-spin"/> : <Download size={16}/>} Exportar
+                    {loading ? <Loader2 size={16} className="animate-spin"/> : <Download size={16}/>} {t('export.export')}
                 </Button>
             </div>
         </Modal>

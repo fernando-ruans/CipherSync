@@ -5,6 +5,7 @@ const (
 	TypeNote       = "note"
 	TypeCreditCard = "credit_card"
 	TypeIdentity   = "identity"
+	TypePasskey    = "passkey"
 )
 
 type Item struct {
@@ -19,11 +20,29 @@ type Item struct {
 	Tags       []string          `json:"tags"`
 	Fields     map[string]string `json:"fields"`
 	TotpSecret string            `json:"totpSecret"`
+	Passkey    *PasskeyData      `json:"passkey,omitempty"`
 	Favorite   bool              `json:"favorite"`
 	Deleted    bool              `json:"deleted"`
 	DeletedAt  int64             `json:"deletedAt"`
 	CreatedAt  int64             `json:"createdAt"`
 	UpdatedAt  int64             `json:"updatedAt"`
+}
+
+// PasskeyData stores a passkey credential reference (Scope A: inventory only,
+// not a FIDO2 authenticator). Lives inside the encrypted Item JSON blob.
+type PasskeyData struct {
+	CredentialID string   `json:"credentialId"`
+	RpID         string   `json:"rpId"`
+	RpName       string   `json:"rpName"`
+	UserHandle   string   `json:"userHandle"`
+	Username     string   `json:"username"`
+	DisplayName  string   `json:"displayName"`
+	PrivateKey   string   `json:"privateKey"`
+	PublicKey    string   `json:"publicKey"`
+	CoseAlg      int      `json:"coseAlg"`
+	Transports   []string `json:"transports"`
+	AAGUID       string   `json:"aaguid"`
+	BackupState  string   `json:"backupState"`
 }
 
 type Attachment struct {

@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react'
 import {Copy} from 'lucide-react'
 import {localTOTP} from '../lib/totp'
 import {safeCopy} from '../lib/util'
+import {useT} from '../lib/locales'
 import {useApp} from '../state'
 
 function CountdownRing({seconds, total = 30}: {seconds: number; total?: number}) {
@@ -30,6 +31,7 @@ function CountdownRing({seconds, total = 30}: {seconds: number; total?: number})
 }
 
 export function TOTPDisplay({itemId}: {itemId: string}) {
+    const t = useT()
     const secret = useApp((s) => s.items.find((i) => i.id === itemId)?.totpSecret ?? '')
     const [code, setCode] = useState('')
     const [seconds, setSeconds] = useState(0)
@@ -64,19 +66,19 @@ export function TOTPDisplay({itemId}: {itemId: string}) {
     if (error || !secret) return null
 
     async function copy() {
-        await safeCopy(code, 'Código copiado')
+        await safeCopy(code, t('totp.codeCopied'))
     }
 
     return (
         <div className="flex items-center gap-4 rounded-xl border border-edge bg-input p-4">
             <CountdownRing seconds={seconds}/>
             <div className="min-w-0 flex-1">
-                <div className="text-xs font-medium text-mut">Código de verificação (2FA)</div>
+                <div className="text-xs font-medium text-mut">{t('totp.code')}</div>
                 <div className="mt-0.5 flex items-center gap-3">
                     <span className="font-mono text-3xl font-bold tracking-[0.2em] text-ink">{code || '······'}</span>
                     <button
                         onClick={() => void copy()}
-                        title="Copiar código"
+                        title={t('totp.copyCode')}
                         className="rounded-lg p-1.5 text-mut transition-colors hover:bg-hover hover:text-ink"
                     >
                         <Copy size={16}/>

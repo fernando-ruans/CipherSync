@@ -6,7 +6,9 @@ import {
     Dices,
     Globe,
     History,
+    KeyRound,
     Lock,
+    Pencil,
     Save,
     ShieldCheck,
     Star,
@@ -14,6 +16,7 @@ import {
     User,
 } from 'lucide-react'
 import {useApp, setUnsavedItem} from '../state'
+import {useT} from '../lib/locales'
 import {api, errorMessage} from '../lib/api'
 import {Button, IconButton, Input, RevealInput} from './ui'
 import {GeneratorModal} from './GeneratorModal'
@@ -21,6 +24,8 @@ import {VersionHistoryModal} from './VersionHistory'
 import {TagInput} from './TagInput'
 import {TOTPSetupModal} from './TOTPSetupModal'
 import {TOTPDisplay} from './TOTPDisplay'
+import {PasskeyModal} from './PasskeyModal'
+import type {PasskeyData} from '../lib/types'
 import {AttachmentsSection} from './AttachmentsSection'
 import {TYPE_FIELDS, ITEM_TYPES} from '../lib/fields'
 import {extractDomain, safeCopy} from '../lib/util'
@@ -39,19 +44,94 @@ function SecretRow({
     placeholder?: string
     onGenerate?: () => void
 }) {
+    const t = useT()
     return (
         <div className="flex items-end gap-2">
             <div className="flex-1">
                 <RevealInput label={label} value={value} onChange={onChange} placeholder={placeholder}/>
             </div>
-            <IconButton title="Copiar" onClick={() => void safeCopy(value)}>
+            <IconButton title={t('common.copy')} onClick={() => void safeCopy(value)}>
                 <Copy size={15}/>
             </IconButton>
             {onGenerate && (
-                <IconButton title="Gerar" onClick={onGenerate}>
+                <IconButton title={t('common.generate')} onClick={onGenerate}>
                     <Dices size={15}/>
                 </IconButton>
             )}
+        </div>
+    )
+}
+
+function PasskeySection({data, onEdit, onRemove}: {
+    data: PasskeyData
+    onEdit: () => void
+    onRemove?: () => void
+}) {
+    const t = useT()
+    const refMode = !data.privateKey.trim()
+    return (
+        <div className="rounded-xl border border-edge bg-input p-4">
+            <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-mut">{t('passkey.badge')}</span>
+                <div className="flex gap-1">
+                    <IconButton title={t('passkey.edit')} onClick={onEdit}>
+                        <Pencil size={14}/>
+                    </IconButton>
+                    {onRemove && (
+                        <IconButton title={t('passkey.remove')} onClick={onRemove} className="text-red-400 hover:bg-red-500/10">
+                            <Trash2 size={14}/>
+                        </IconButton>
+                    )}
+                </div>
+            </div>
+            {refMode && (
+                <p className="mb-3 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-400">
+                    {t('passkey.refOnly')}
+                </p>
+            )}
+            <div className="space-y-2 text-sm">
+                <PasskeyRow label="RP ID" value={data.rpId}/>
+                {data.rpName && <PasskeyRow label={t('passkey.rpName')} value={data.rpName}/>}
+                {data.username && <PasskeyRow label={t('passkey.username')} value={data.username}/>}
+                <PasskeyRow label={t('passkey.credentialIdLabel')} value={data.credentialId} mono truncate/>
+                {!refMode && <PasskeyRow label={t('passkey.privateKeyLabel')} value="••••••••" mono secret={data.privateKey}/>}
+                {data.transports.length > 0 && (
+                    <div className="flex gap-1.5 pt-1">
+                        {data.transports.map((t) => (
+                            <span key={t} className="rounded-md bg-white/5 px-2 py-0.5 text-xs text-mut">{t}</span>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+function PasskeyRow({label, value, mono, truncate, secret}: {
+    label: string
+    value: string
+    mono?: boolean
+    truncate?: boolean
+    secret?: string
+}) {
+    const display = secret ?? value
+    const t = useT()
+    return (
+        <div className="flex items-center justify-between gap-2">
+            <span className="shrink-0 text-xs text-faint">{label}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+                <span className={`truncate text-soft ${mono ? 'font-mono text-[13px]' : ''}`} title={truncate ? display : undefined}>
+                    {truncate && display.length > 24 ? `${display.slice(0, 12)}…${display.slice(-8)}` : display}
+                </span>
+                <button
+                    type="button"
+                    title={t('common.copy')}
+                    onClick={() => void safeCopy(secret ?? value)}
+                    className="shrink-0 rounded-md p-1 text-mut hover:bg-hover hover:text-ink"
+                >
+                    <Copy size={13}/>
+                </button>
+            </span>
         </div>
     )
 }
@@ -62,12 +142,13 @@ function CopyRow({label, value, placeholder, onChange}: {
     onChange: (v: string) => void
     placeholder?: string
 }) {
+    const t = useT()
     return (
         <div className="flex items-end gap-2">
             <div className="flex-1">
                 <Input label={label} value={value} onChange={onChange} placeholder={placeholder}/>
             </div>
-            <IconButton title="Copiar" onClick={() => void safeCopy(value)}>
+            <IconButton title={t('common.copy')} onClick={() => void safeCopy(value)}>
                 <Copy size={15}/>
             </IconButton>
         </div>
@@ -80,6 +161,8 @@ export function ItemDetail() {
     const updateItem = useApp((s) => s.updateItem)
     const removeItem = useApp((s) => s.removeItem)
     const breached = useApp((s) => s.breachedIds.includes(selectedId ?? ''))
+    const lang = useApp((s) => s.lang)
+    const t = useT()
 
     const item = items.find((i) => i.id === selectedId) ?? null
 
@@ -89,6 +172,7 @@ export function ItemDetail() {
     const [generatorField, setGeneratorField] = useState('')
     const [showHistory, setShowHistory] = useState(false)
     const [showTOTPSetup, setShowTOTPSetup] = useState(false)
+    const [showPasskeyModal, setShowPasskeyModal] = useState(false)
     const appliedRef = useRef('')
 
     useEffect(() => {
@@ -132,7 +216,7 @@ export function ItemDetail() {
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-input">
                     <Lock size={26} className="text-faint"/>
                 </div>
-                <p className="mt-4 text-sm text-faint">Selecione um item ou crie um novo</p>
+                <p className="mt-4 text-sm text-faint">{t('detail.selectItem')}</p>
             </div>
         )
     }
@@ -152,7 +236,7 @@ export function ItemDetail() {
     function changeType(type: ItemType) {
         if (!draft) return
         const hasFields = Object.keys(draft.fields ?? {}).some((k) => (draft.fields[k] ?? '').trim() !== '')
-        if (hasFields && !confirm('Trocar o tipo apaga os campos específicos preenchidos. Continuar?')) {
+        if (hasFields && !confirm(t('detail.changeTypeConfirm'))) {
             return
         }
         setDraft({...draft, type, fields: {}})
@@ -163,7 +247,7 @@ export function ItemDetail() {
         setSaving(true)
         try {
             await updateItem(draft)
-            toast.success('Alterações salvas')
+            toast.success(t('detail.saved'))
         } catch (err) {
             toast.error(await errorMessage(err))
         } finally {
@@ -174,10 +258,10 @@ export function ItemDetail() {
 
     async function del() {
         if (!item) return
-        if (!confirm(`Mover "${item.title}" para a lixeira? Você pode restaurá-lo depois.`)) return
+        if (!confirm(t('detail.moveTrashConfirm', {title: item.title}))) return
         try {
             await removeItem(item.id)
-            toast.success('Item movido para a lixeira')
+            toast.success(t('detail.movedTrash'))
         } catch (err) {
             toast.error(await errorMessage(err))
         }
@@ -200,7 +284,19 @@ export function ItemDetail() {
             await updateItem({...draft, totpSecret: secret})
             setDraft({...draft, totpSecret: secret})
             setShowTOTPSetup(false)
-            toast.success('2FA configurado')
+            toast.success(t('detail.2faSaved'))
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        }
+    }
+
+    async function savePasskey(data: PasskeyData) {
+        if (!draft) return
+        try {
+            await updateItem({...draft, passkey: data})
+            setDraft({...draft, passkey: data})
+            setShowPasskeyModal(false)
+            toast.success(t('passkey.saved'))
         } catch (err) {
             toast.error(await errorMessage(err))
         }
@@ -208,7 +304,7 @@ export function ItemDetail() {
 
     async function removeTOTP() {
         if (!draft) return
-        if (!confirm('Remover o 2FA deste item?')) return
+        if (!confirm(t('detail.remove2faConfirm'))) return
         try {
             await updateItem({...draft, totpSecret: ''})
             setDraft({...draft, totpSecret: ''})
@@ -230,9 +326,9 @@ export function ItemDetail() {
                             onChange={(e) => changeType(e.target.value as ItemType)}
                             className="rounded-lg border border-edge bg-input px-2 py-1 text-xs font-medium text-mut outline-none"
                         >
-                            {ITEM_TYPES.map((t) => (
-                                <option key={t.value} value={t.value}>
-                                    {t.label}
+                            {ITEM_TYPES.map((it) => (
+                                <option key={it.value} value={it.value}>
+                                    {t(`type.${it.value}`)}
                                 </option>
                             ))}
                         </select>
@@ -240,7 +336,7 @@ export function ItemDetail() {
                     <input
                         value={draft.title}
                         onChange={(e) => set({title: e.target.value})}
-                        placeholder="Título"
+                        placeholder={t('detail.titlePh')}
                         className="w-full bg-transparent text-xl font-semibold text-ink outline-none placeholder:text-faint"
                     />
                     {domain && (
@@ -255,22 +351,22 @@ export function ItemDetail() {
                     )}
                     {breached && (
                         <div className="mt-2 flex w-fit items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-400">
-                            <AlertTriangle size={13}/> Senha encontrada em vazamentos — altere-a
+                            <AlertTriangle size={13}/> {t('detail.breached')}
                         </div>
                     )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                     <IconButton
-                        title={draft.favorite ? 'Remover dos favoritos' : 'Marcar como favorito'}
+                        title={draft.favorite ? t('detail.favRemove') : t('detail.favAdd')}
                         onClick={() => set({favorite: !draft.favorite})}
                         className={draft.favorite ? 'text-amber-400' : ''}
                     >
                         <Star size={18} fill={draft.favorite ? 'currentColor' : 'none'}/>
                     </IconButton>
-                    <IconButton title="Histórico de versões" onClick={() => setShowHistory(true)}>
+                    <IconButton title={t('detail.history')} onClick={() => setShowHistory(true)}>
                         <History size={18}/>
                     </IconButton>
-                    <IconButton title="Excluir" onClick={() => void del()} className="text-red-400 hover:bg-red-500/10">
+                    <IconButton title={t('detail.delete')} onClick={() => void del()} className="text-red-400 hover:bg-red-500/10">
                         <Trash2 size={18}/>
                     </IconButton>
                 </div>
@@ -279,11 +375,11 @@ export function ItemDetail() {
             <div className="space-y-4">
                 {draft.type === 'login' && (
                     <>
-                        <CopyRow label="Nome de usuário" value={draft.username} onChange={(v) => set({username: v})}/>
-                        <SecretRow label="Senha" value={draft.password} onChange={(v) => set({password: v})} onGenerate={() => openGenerator('password')}/>
+                        <CopyRow label={t('detail.username')} value={draft.username} onChange={(v) => set({username: v})} placeholder={t('detail.usernamePh')}/>
+                        <SecretRow label={t('detail.password')} value={draft.password} onChange={(v) => set({password: v})} onGenerate={() => openGenerator('password')}/>
                         <div className="flex items-end gap-2">
                             <div className="flex-1">
-                                <Input label="Site (URL)" value={draft.url} onChange={(v) => set({url: v})} placeholder="https://exemplo.com"/>
+                                <Input label={t('detail.siteUrl')} value={draft.url} onChange={(v) => set({url: v})} placeholder={t('detail.siteUrlPh')}/>
                             </div>
                         </div>
 
@@ -294,15 +390,41 @@ export function ItemDetail() {
                                     onClick={() => void removeTOTP()}
                                     className="mt-2 text-xs text-faint transition-colors hover:text-red-400"
                                 >
-                                    Remover 2FA
+                                    {t('detail.remove2fa')}
                                 </button>
                             </div>
                         ) : (
                             <Button variant="subtle" onClick={() => setShowTOTPSetup(true)}>
-                                <ShieldCheck size={16}/> Adicionar 2FA
+                                <ShieldCheck size={16}/> {t('detail.add2fa')}
+                            </Button>
+                        )}
+
+                        {draft.passkey ? (
+                            <PasskeySection
+                                data={draft.passkey}
+                                onEdit={() => setShowPasskeyModal(true)}
+                                onRemove={() => set({passkey: undefined})}
+                            />
+                        ) : (
+                            <Button variant="subtle" onClick={() => setShowPasskeyModal(true)}>
+                                <KeyRound size={16}/> {t('detail.attachPasskey')}
                             </Button>
                         )}
                     </>
+                )}
+
+                {draft.type === 'passkey' && (
+                    draft.passkey ? (
+                        <PasskeySection
+                            data={draft.passkey}
+                            onEdit={() => setShowPasskeyModal(true)}
+                            onRemove={undefined}
+                        />
+                    ) : (
+                        <Button variant="subtle" onClick={() => setShowPasskeyModal(true)}>
+                            <KeyRound size={16}/> {t('detail.setupPasskey')}
+                        </Button>
+                    )
                 )}
 
                 {(draft.type === 'credit_card' || draft.type === 'identity') && (
@@ -311,7 +433,7 @@ export function ItemDetail() {
                             f.secret ? (
                                 <div key={f.key} className="col-span-2">
                                     <SecretRow
-                                        label={f.label}
+                                        label={t(`field.${f.key}`)}
                                         value={draft.fields[f.key] ?? ''}
                                         onChange={(v) => setField(f.key, v)}
                                         onGenerate={
@@ -324,7 +446,7 @@ export function ItemDetail() {
                             ) : (
                                 <div key={f.key} className={f.key === 'number' || f.key === 'cardholder' ? 'col-span-2' : ''}>
                                     <CopyRow
-                                        label={f.label}
+                                        label={t(`field.${f.key}`)}
                                         value={draft.fields[f.key] ?? ''}
                                         onChange={(v) => setField(f.key, v)}
                                         placeholder={f.placeholder}
@@ -336,18 +458,18 @@ export function ItemDetail() {
                 )}
 
                 <div>
-                    <Input label="Categoria" value={draft.category} onChange={(v) => set({category: v})} placeholder="e.g. Pessoal, Trabalho, Banco"/>
+                    <Input label={t('detail.category')} value={draft.category} onChange={(v) => set({category: v})} placeholder={t('detail.categoryPh')}/>
                 </div>
 
                 <TagInput tags={draft.tags ?? []} onChange={(tags) => set({tags})} suggestions={tagSuggestions}/>
 
                 <div>
-                    <span className="mb-1.5 block text-xs font-medium text-mut">Notas</span>
+                    <span className="mb-1.5 block text-xs font-medium text-mut">{t('detail.notes')}</span>
                     <textarea
                         value={draft.notes}
                         onChange={(e) => set({notes: e.target.value})}
                         rows={4}
-                        placeholder="Anotações, respostas de segurança, etc."
+                        placeholder={t('detail.notesPh')}
                         className="w-full resize-none rounded-lg border border-edge bg-input px-3 py-2 text-sm text-ink placeholder:text-faint outline-none transition-colors focus:border-indigo-500/60"
                     />
                 </div>
@@ -358,12 +480,12 @@ export function ItemDetail() {
             <div className="mt-6 flex items-center justify-between border-t border-edge pt-4">
                 <div className="flex items-center gap-4 text-xs text-faint">
                     <span className="flex items-center gap-1">
-                        <User size={12}/> {draft.username || 'sem usuário'}
+                        <User size={12}/> {draft.username || t('detail.noUser')}
                     </span>
-                    <span>Criado em {new Date(draft.createdAt).toLocaleDateString('pt-BR')}</span>
+                    <span>{t('detail.createdAt')} {new Date(draft.createdAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'pt-BR')}</span>
                 </div>
                 <Button onClick={() => void save()} disabled={!dirty || saving} className="px-6">
-                    <Save size={16}/> {saving ? 'Salvando...' : 'Salvar'}
+                    <Save size={16}/> {saving ? t('common.saving') : t('common.save')}
                 </Button>
             </div>
 
@@ -376,6 +498,13 @@ export function ItemDetail() {
             )}
             {showHistory && <VersionHistoryModal itemId={item.id} onClose={() => setShowHistory(false)}/>}
             {showTOTPSetup && <TOTPSetupModal onClose={() => setShowTOTPSetup(false)} onSave={saveTOTP}/>}
+            {showPasskeyModal && (
+                <PasskeyModal
+                    initial={draft.passkey ?? null}
+                    onClose={() => setShowPasskeyModal(false)}
+                    onSave={(data) => void savePasskey(data)}
+                />
+            )}
         </div>
     )
 }

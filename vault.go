@@ -370,6 +370,16 @@ func (v *Vault) create(input Item) (Item, error) {
 	if input.Type == "" {
 		input.Type = TypeLogin
 	}
+	if input.Type == TypePasskey || input.Passkey != nil {
+		if err := validatePasskey("", input.Passkey, v.items); err != nil {
+			return Item{}, err
+		}
+		if input.Passkey != nil {
+			input.Passkey.RpID = strings.ToLower(strings.TrimSpace(input.Passkey.RpID))
+			input.Passkey.CredentialID = strings.TrimSpace(input.Passkey.CredentialID)
+			input.Passkey.UserHandle = strings.TrimSpace(input.Passkey.UserHandle)
+		}
+	}
 	now := time.Now().UnixMilli()
 	input.ID = uuid.NewString()
 	input.CreatedAt = now
@@ -390,6 +400,16 @@ func (v *Vault) update(input Item) error {
 		return ErrItemNotFound
 	}
 	normalizeItem(&input)
+	if input.Type == TypePasskey || input.Passkey != nil {
+		if err := validatePasskey(input.ID, input.Passkey, v.items); err != nil {
+			return err
+		}
+		if input.Passkey != nil {
+			input.Passkey.RpID = strings.ToLower(strings.TrimSpace(input.Passkey.RpID))
+			input.Passkey.CredentialID = strings.TrimSpace(input.Passkey.CredentialID)
+			input.Passkey.UserHandle = strings.TrimSpace(input.Passkey.UserHandle)
+		}
+	}
 	// skip version snapshot when only the favorite flag changed
 	onlyFavorite := existing.Favorite != input.Favorite &&
 		existing.Title == input.Title &&

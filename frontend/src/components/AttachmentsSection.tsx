@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import toast from 'react-hot-toast'
 import {Download, FileUp, Loader2, Paperclip, Trash2} from 'lucide-react'
 import {api, errorMessage} from '../lib/api'
+import {useT} from '../lib/locales'
 import {IconButton} from './ui'
 import type {Attachment} from '../lib/types'
 
@@ -12,6 +13,7 @@ function formatSize(bytes: number): string {
 }
 
 export function AttachmentsSection({itemId}: {itemId: string}) {
+    const t = useT()
     const [files, setFiles] = useState<Attachment[]>([])
     const [uploading, setUploading] = useState(false)
     const [downloading, setDownloading] = useState<string | null>(null)
@@ -50,7 +52,7 @@ export function AttachmentsSection({itemId}: {itemId: string}) {
 
     async function upload(file: File) {
         if (file.size > 10 * 1024 * 1024) {
-            toast.error('Arquivo maior que 10 MB')
+            toast.error(t('attach.tooLarge'))
             return
         }
         setUploading(true)
@@ -58,7 +60,7 @@ export function AttachmentsSection({itemId}: {itemId: string}) {
             const b64 = await fileToB64(file)
             const att = await api.addAttachment(itemId, file.name, b64)
             setFiles((prev) => [...prev, att])
-            toast.success('Anexo adicionado')
+            toast.success(t('attach.added'))
         } catch (err) {
             toast.error(await errorMessage(err))
         } finally {
@@ -90,11 +92,11 @@ export function AttachmentsSection({itemId}: {itemId: string}) {
     }
 
     async function remove(att: Attachment) {
-        if (!confirm(`Remover o anexo "${att.name}" permanentemente?`)) return
+        if (!confirm(t('attach.removeConfirm', {name: att.name}))) return
         try {
             await api.deleteAttachment(att.id)
             setFiles((prev) => prev.filter((f) => f.id !== att.id))
-            toast.success('Anexo removido')
+            toast.success(t('attach.removed'))
         } catch (err) {
             toast.error(await errorMessage(err))
         }
@@ -102,10 +104,10 @@ export function AttachmentsSection({itemId}: {itemId: string}) {
 
     return (
         <div>
-            <span className="mb-1.5 block text-xs font-medium text-mut">Anexos</span>
+            <span className="mb-1.5 block text-xs font-medium text-mut">{t('attach.title')}</span>
             <div className="space-y-1.5 rounded-lg border border-edge bg-input p-2.5">
                 {files.length === 0 && (
-                    <p className="px-1 py-1 text-xs text-faint">Nenhum anexo. Arquivos ficam criptografados no cofre (máx. 10 MB).</p>
+                    <p className="px-1 py-1 text-xs text-faint">{t('attach.empty')}</p>
                 )}
                 {files.map((f) => (
                     <div key={f.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover">
@@ -113,14 +115,14 @@ export function AttachmentsSection({itemId}: {itemId: string}) {
                         <span className="min-w-0 flex-1 truncate text-sm text-soft" title={f.name}>{f.name}</span>
                         <span className="shrink-0 text-xs text-faint">{formatSize(f.size)}</span>
                         <IconButton
-                            title="Baixar"
+                            title={t('attach.download')}
                             onClick={() => void download(f)}
                             className="h-7 w-7"
                         >
                             {downloading === f.id ? <Loader2 size={14} className="animate-spin"/> : <Download size={14}/>}
                         </IconButton>
                         <IconButton
-                            title="Remover anexo"
+                            title={t('attach.remove')}
                             onClick={() => void remove(f)}
                             className="h-7 w-7 text-red-400 hover:bg-red-500/10"
                         >
@@ -145,7 +147,7 @@ export function AttachmentsSection({itemId}: {itemId: string}) {
                     className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-edge px-3 py-2 text-xs font-medium text-mut transition-colors hover:bg-hover hover:text-ink disabled:opacity-50"
                 >
                     {uploading ? <Loader2 size={14} className="animate-spin"/> : <FileUp size={14}/>}
-                    Adicionar arquivo
+                    {t('attach.add')}
                 </button>
             </div>
         </div>

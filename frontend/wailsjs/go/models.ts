@@ -150,6 +150,40 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class PasskeyData {
+	    credentialId: string;
+	    rpId: string;
+	    rpName: string;
+	    userHandle: string;
+	    username: string;
+	    displayName: string;
+	    privateKey: string;
+	    publicKey: string;
+	    coseAlg: number;
+	    transports: string[];
+	    aaguid: string;
+	    backupState: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PasskeyData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.credentialId = source["credentialId"];
+	        this.rpId = source["rpId"];
+	        this.rpName = source["rpName"];
+	        this.userHandle = source["userHandle"];
+	        this.username = source["username"];
+	        this.displayName = source["displayName"];
+	        this.privateKey = source["privateKey"];
+	        this.publicKey = source["publicKey"];
+	        this.coseAlg = source["coseAlg"];
+	        this.transports = source["transports"];
+	        this.aaguid = source["aaguid"];
+	        this.backupState = source["backupState"];
+	    }
+	}
 	export class Item {
 	    id: string;
 	    type: string;
@@ -162,6 +196,7 @@ export namespace main {
 	    tags: string[];
 	    fields: Record<string, string>;
 	    totpSecret: string;
+	    passkey?: PasskeyData;
 	    favorite: boolean;
 	    deleted: boolean;
 	    deletedAt: number;
@@ -185,12 +220,31 @@ export namespace main {
 	        this.tags = source["tags"];
 	        this.fields = source["fields"];
 	        this.totpSecret = source["totpSecret"];
+	        this.passkey = this.convertValues(source["passkey"], PasskeyData);
 	        this.favorite = source["favorite"];
 	        this.deleted = source["deleted"];
 	        this.deletedAt = source["deletedAt"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ImportResult {
 	    created: number;
@@ -228,6 +282,7 @@ export namespace main {
 		    return a;
 		}
 	}
+	
 	
 	
 	export class PasswordOptions {

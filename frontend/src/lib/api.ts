@@ -60,6 +60,9 @@ export const api = {
     getSettings: (): Promise<Record<string, string>> => window.go.main.App.GetSettings(),
     setSetting: (key: string, value: string): Promise<void> => window.go.main.App.SetSetting(key, value),
     setAutolockMinutes: (minutes: number): Promise<void> => window.go.main.App.SetAutolockMinutes(minutes),
+    setCloseToTray: (enabled: boolean): Promise<void> => window.go.main.App.SetCloseToTray(enabled),
+    setQuickAccess: (enabled: boolean): Promise<void> => window.go.main.App.SetQuickAccess(enabled),
+    closeQuickAccess: (): Promise<void> => window.go.main.App.CloseQuickAccess(),
     prefetchFavicons: (): Promise<void> => window.go.main.App.PrefetchFavicons(),
     importCSV: (data: string, mapping: import('./types').FieldMapping[]): Promise<import('./types').ImportResult> =>
         window.go.main.App.ImportCSV(data, mapping),
@@ -86,6 +89,8 @@ export const api = {
 }
 
 export async function errorMessage(e: unknown): Promise<string> {
-    if (e instanceof Error) return e.message
-    return String(e)
+    const {getLang} = await import('./langStore')
+    const {translateError} = await import('./locales')
+    const raw = e instanceof Error ? e.message : String(e)
+    return translateError(getLang(), raw)
 }

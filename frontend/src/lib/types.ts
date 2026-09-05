@@ -1,4 +1,19 @@
-export type ItemType = 'login' | 'note' | 'credit_card' | 'identity'
+export type ItemType = 'login' | 'note' | 'credit_card' | 'identity' | 'passkey'
+
+export interface PasskeyData {
+    credentialId: string
+    rpId: string
+    rpName: string
+    userHandle: string
+    username: string
+    displayName: string
+    privateKey: string
+    publicKey: string
+    coseAlg: number
+    transports: string[]
+    aaguid: string
+    backupState: string
+}
 
 export interface Item {
     id: string
@@ -12,6 +27,7 @@ export interface Item {
     tags: string[]
     fields: Record<string, string>
     totpSecret: string
+    passkey?: PasskeyData | null
     favorite: boolean
     deleted: boolean
     deletedAt: number
@@ -149,6 +165,9 @@ export interface AppApi {
     GetSettings(): Promise<Record<string, string>>
     SetSetting(key: string, value: string): Promise<void>
     SetAutolockMinutes(minutes: number): Promise<void>
+    SetCloseToTray(enabled: boolean): Promise<void>
+    SetQuickAccess(enabled: boolean): Promise<void>
+    CloseQuickAccess(): Promise<void>
     PrefetchFavicons(): Promise<void>
     ImportCSV(data: string, mapping: FieldMapping[]): Promise<ImportResult>
     ImportAutoCSV(data: string): Promise<ImportResult>

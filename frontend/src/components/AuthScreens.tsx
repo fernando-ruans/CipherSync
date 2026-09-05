@@ -12,10 +12,12 @@ import {
 import {useApp} from '../state'
 import {api, errorMessage} from '../lib/api'
 import {Button, Input, RevealInput, StrengthMeter} from './ui'
+import {useT} from '../lib/locales'
 import type {VaultInfo} from '../lib/types'
 import logo from '../assets/ciphersync-logo-128.png'
 
 function Shell({children}: {children: React.ReactNode}) {
+    const t = useT()
     return (
         <div className="flex h-full items-center justify-center bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.15),transparent_60%)]">
             <div className="w-full max-w-sm">
@@ -25,7 +27,7 @@ function Shell({children}: {children: React.ReactNode}) {
                         <span className="text-ink">Cipher</span>
                         <span style={{color: '#3142cb'}}>Sync</span>
                     </h1>
-                    <p className="mt-1 text-sm text-mut">Seu cofre de senhas, criptografado.</p>
+                    <p className="mt-1 text-sm text-mut">{t('auth.tagline')}</p>
                 </div>
                 <div className="rounded-2xl border border-edge bg-surface p-6 shadow-2xl">{children}</div>
             </div>
@@ -42,6 +44,7 @@ function LoadingButton({loading, children}: {loading: boolean; children: React.R
 }
 
 export function SetupScreen() {
+    const t = useT()
     const setup = useApp((s) => s.setup)
     const [name, setName] = useState('')
     const [password, setPassword] = useState('')
@@ -61,21 +64,21 @@ export function SetupScreen() {
 
     return (
         <Shell>
-            <h2 className="mb-1 text-lg font-semibold text-ink">Criar seu cofre</h2>
+            <h2 className="mb-1 text-lg font-semibold text-ink">{t('auth.setupTitle')}</h2>
             <p className="mb-5 text-sm text-mut">
-                Ele é protegido pela sua senha mestra. <span className="text-soft">Não é possível recuperá-la.</span>
+                {t('auth.setupDesc')} <span className="text-soft">{t('auth.noRecover')}</span>
             </p>
             <form onSubmit={(e) => {
                 e.preventDefault()
                 void submit()
             }} className="space-y-4">
-                <Input label="Nome do cofre" value={name} onChange={setName} placeholder="e.g. Pessoal, Trabalho, Família" autoFocus/>
+                <Input label={t('auth.vaultName')} value={name} onChange={setName} placeholder={t('auth.vaultNamePh')} autoFocus/>
                 <div>
-                    <RevealInput label="Senha mestra" value={password} onChange={setPassword}/>
+                    <RevealInput label={t('auth.masterPw')} value={password} onChange={setPassword}/>
                     <StrengthMeter password={password}/>
                 </div>
                 <Input
-                    label="Confirme a senha"
+                    label={t('auth.confirmPw')}
                     type="password"
                     value={confirm}
                     onChange={setConfirm}
@@ -83,10 +86,10 @@ export function SetupScreen() {
                 />
                 {password.length < 8 && (
                     <p className="flex items-center gap-1.5 text-xs text-amber-400">
-                        <ShieldCheck size={14}/> Use pelo menos 8 caracteres.
+                        <ShieldCheck size={14}/> {t('auth.min8')}
                     </p>
                 )}
-                <LoadingButton loading={loading}>Criar cofre</LoadingButton>
+                <LoadingButton loading={loading}>{t('auth.createVault')}</LoadingButton>
             </form>
         </Shell>
     )
@@ -98,7 +101,11 @@ function VaultCard({vault, selected, onSelect, onDelete}: {
     onSelect: () => void
     onDelete: () => void
 }) {
-    const last = vault.lastOpened ? new Date(vault.lastOpened).toLocaleDateString('pt-BR') : 'nunca'
+    const t = useT()
+    const lang = useApp((s) => s.lang)
+    const last = vault.lastOpened
+        ? new Date(vault.lastOpened).toLocaleDateString(lang === 'en' ? 'en-US' : 'pt-BR')
+        : '—'
     return (
         <div
             onClick={onSelect}
@@ -113,11 +120,11 @@ function VaultCard({vault, selected, onSelect, onDelete}: {
                 <div className={`truncate text-sm font-semibold ${selected ? 'text-accent' : 'text-soft'}`}>
                     {vault.name}
                 </div>
-                <div className="text-xs text-faint">Último acesso: {last}</div>
+                <div className="text-xs text-faint">{t('auth.lastAccess')}: {last}</div>
             </div>
             <button
                 type="button"
-                title="Excluir cofre"
+                title={t('auth.deleteVault')}
                 onClick={(e) => {
                     e.stopPropagation()
                     onDelete()
@@ -131,6 +138,7 @@ function VaultCard({vault, selected, onSelect, onDelete}: {
 }
 
 export function UnlockScreen() {
+    const t = useT()
     const vaults = useApp((s) => s.vaults)
     const unlock = useApp((s) => s.unlock)
     const newVault = useApp((s) => s.newVault)
@@ -155,7 +163,7 @@ export function UnlockScreen() {
     }
 
     function confirmDelete(vault: VaultInfo) {
-        if (confirm(`Excluir o cofre "${vault.name}"? Todos os itens serão apagados permanentemente.`)) {
+        if (confirm(t('auth.confirmDeleteVault', {name: vault.name}))) {
             void deleteVault(vault.file)
         }
     }
@@ -165,12 +173,12 @@ export function UnlockScreen() {
             {!selected ? (
                 <>
                     <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-ink">
-                        <Vault size={18} className="text-accent"/> Seus cofres
+                        <Vault size={18} className="text-accent"/> {t('auth.yourVaults')}
                     </h2>
-                    <p className="mb-5 text-sm text-mut">Selecione um cofre para desbloquear.</p>
+                    <p className="mb-5 text-sm text-mut">{t('auth.selectVault')}</p>
 
                     {vaults.length === 0 ? (
-                        <p className="py-4 text-center text-sm text-faint">Nenhum cofre ainda.</p>
+                        <p className="py-4 text-center text-sm text-faint">{t('auth.noVaults')}</p>
                     ) : (
                         <div className="space-y-2">
                             {vaults.map((v) => (
@@ -186,7 +194,7 @@ export function UnlockScreen() {
                     )}
 
                     <Button variant="subtle" className="mt-4 w-full" onClick={newVault}>
-                        <Plus size={16}/> Criar novo cofre
+                        <Plus size={16}/> {t('auth.newVault')}
                     </Button>
                 </>
             ) : (
@@ -198,26 +206,26 @@ export function UnlockScreen() {
                         }}
                         className="mb-3 flex items-center gap-1 text-xs text-mut transition-colors hover:text-ink"
                     >
-                        <ChevronLeft size={14}/> Todos os cofres
+                        <ChevronLeft size={14}/> {t('auth.allVaults')}
                     </button>
                     <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-ink">
                         <KeyRound size={18} className="text-accent"/> {selected.name}
                     </h2>
-                    <p className="mb-5 text-sm text-mut">Digite sua senha mestra para desbloquear.</p>
+                    <p className="mb-5 text-sm text-mut">{t('auth.unlockDesc')}</p>
 
                     <form onSubmit={(e) => {
                         e.preventDefault()
                         void submit()
                     }} className="space-y-4">
                         <Input
-                            label="Senha mestra"
+                            label={t('auth.masterPw')}
                             type="password"
                             value={password}
                             onChange={setPassword}
                             autoFocus
                             onEnter={() => void submit()}
                         />
-                        <LoadingButton loading={loading}>Desbloquear</LoadingButton>
+                        <LoadingButton loading={loading}>{t('auth.unlock')}</LoadingButton>
                     </form>
                 </>
             )}

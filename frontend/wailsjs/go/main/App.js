@@ -22,6 +22,10 @@ export function ChangeMasterPassword(arg1, arg2, arg3) {
   return window['go']['main']['App']['ChangeMasterPassword'](arg1, arg2, arg3);
 }
 
+export function CloseQuickAccess() {
+  return window['go']['main']['App']['CloseQuickAccess']();
+}
+
 export function CopyToClipboard(arg1) {
   return window['go']['main']['App']['CopyToClipboard'](arg1);
 }
@@ -190,8 +194,16 @@ export function SetCategoryBatch(arg1, arg2) {
   return window['go']['main']['App']['SetCategoryBatch'](arg1, arg2);
 }
 
+export function SetCloseToTray(arg1) {
+  return window['go']['main']['App']['SetCloseToTray'](arg1);
+}
+
 export function SetFavoriteBatch(arg1, arg2) {
   return window['go']['main']['App']['SetFavoriteBatch'](arg1, arg2);
+}
+
+export function SetQuickAccess(arg1) {
+  return window['go']['main']['App']['SetQuickAccess'](arg1);
 }
 
 export function SetSetting(arg1, arg2) {

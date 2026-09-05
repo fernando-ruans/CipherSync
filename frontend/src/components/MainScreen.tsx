@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import {useApp} from '../state'
 import {api} from '../lib/api'
+import {useT, translate} from '../lib/locales'
 import {Button, IconButton, Modal, RevealInput, Input} from './ui'
 import {ItemDetail} from './ItemDetail'
 import {GeneratorModal} from './GeneratorModal'
@@ -31,6 +32,7 @@ import {SettingsModal} from './SettingsModal'
 import {ImportModal} from './ImportModal'
 import {ExportModal} from './ExportModal'
 import {WatchtowerModal} from './WatchtowerModal'
+import {QuickAccess} from './QuickAccess'
 import {useTOTPCode} from './TOTPDisplay'
 import {extractDomain, downloadFile, safeCopy} from '../lib/util'
 import type {Item} from '../lib/types'
@@ -69,6 +71,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
     const setTrashView = useApp((s) => s.setTrashView)
     const trash = useApp((s) => s.trash)
     const loadTrash = useApp((s) => s.loadTrash)
+    const t = useT()
 
     const categories = useMemo(() => {
         const map = new Map<string, number>()
@@ -92,7 +95,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
     const nav = [
         {
             key: 'all',
-            label: 'Todos os itens',
+            label: t('main.allItems'),
             icon: <Layers size={16}/>,
             active: !favoritesOnly && !trashView && category === 'all' && tag === '',
             count: items.length,
@@ -100,7 +103,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
         },
         {
             key: 'fav',
-            label: 'Favoritos',
+            label: t('main.favorites'),
             icon: <Star size={16}/>,
             active: favoritesOnly && !trashView,
             count: items.filter((i) => i.favorite).length,
@@ -108,7 +111,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
         },
         {
             key: 'watchtower',
-            label: 'Watchtower',
+            label: t('main.watchtower'),
             icon: <Shield size={16}/>,
             active: false,
             count: null,
@@ -116,7 +119,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
         },
         {
             key: 'trash',
-            label: 'Lixeira',
+            label: t('main.trash'),
             icon: <Trash2 size={16}/>,
             active: trashView,
             count: trash.length,
@@ -137,8 +140,8 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
                             <span className="text-ink">Cipher</span>
                             <span style={{color: '#3142cb'}}>Sync</span>
                         </div>
-                        <div className="truncate text-[11px] text-faint" title={vaultName || 'Cofre'}>
-                            {vaultName || 'Cofre'}
+                        <div className="truncate text-[11px] text-faint" title={vaultName || t('main.vaultTitle')}>
+                            {vaultName || t('main.vaultTitle')}
                         </div>
                     </div>
                 </div>
@@ -146,7 +149,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
                     onClick={() => void lock()}
                     className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-edge bg-input px-3 py-1.5 text-xs font-medium text-mut transition-colors hover:bg-hover hover:text-ink"
                 >
-                    <LogOut size={12}/> Trocar de cofre
+                    <LogOut size={12}/> {t('main.switchVault')}
                 </button>
             </div>
 
@@ -165,9 +168,9 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
                 ))}
 
                 <div className="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-wider text-faint">
-                    Categorias
+                    {t('main.categories')}
                 </div>
-                {categories.length === 0 && <div className="px-3 py-2 text-xs text-faint">Nenhuma ainda</div>}
+                {categories.length === 0 && <div className="px-3 py-2 text-xs text-faint">{t('main.noCategory')}</div>}
                 {categories.map(([name, count]) => (
                     <button
                         key={name}
@@ -188,7 +191,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
                 {tags.length > 0 && (
                     <>
                         <div className="px-3 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-wider text-faint">
-                            Tags
+                            {t('main.tags')}
                         </div>
                         {tags.map(([name, count]) => (
                             <button
@@ -215,25 +218,25 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
                     onClick={onOpenImport}
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-mut transition-colors hover:bg-hover hover:text-ink"
                 >
-                    <Upload size={16}/> Importar
+                    <Upload size={16}/> {t('main.import')}
                 </button>
                 <button
                     onClick={onOpenExport}
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-mut transition-colors hover:bg-hover hover:text-ink"
                 >
-                    <Download size={16}/> Exportar
+                    <Download size={16}/> {t('main.export')}
                 </button>
                 <button
                     onClick={onOpenSettings}
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-mut transition-colors hover:bg-hover hover:text-ink"
                 >
-                    <Settings size={16}/> Configurações
+                    <Settings size={16}/> {t('main.settings')}
                 </button>
                 <button
                     onClick={() => void lock()}
                     className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-mut transition-colors hover:bg-hover hover:text-red-400"
                 >
-                    <LogOut size={16}/> Bloquear
+                    <LogOut size={16}/> {t('main.lock')}
                 </button>
             </div>
         </aside>
@@ -241,6 +244,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
 }
 
 function BatchBar({count}: {count: number}) {
+    const t = useT()
     const items = useApp((s) => s.items)
     const clearMulti = useApp((s) => s.clearMulti)
     const deleteSelected = useApp((s) => s.deleteSelected)
@@ -264,7 +268,7 @@ function BatchBar({count}: {count: number}) {
                 content,
                 kind === 'csv' ? 'text/csv' : 'application/json',
             )
-            toast.success('Selecionados exportados')
+            toast.success(t('export.selectedDone'))
         } catch (err) {
             toast.error(err instanceof Error ? err.message : String(err))
         }
@@ -276,21 +280,21 @@ function BatchBar({count}: {count: number}) {
     return (
         <div className="border-b border-edge bg-surface px-3 py-2">
             <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-accent">{count} selecionado(s)</span>
+                <span className="text-xs font-semibold text-accent">{count} {t('common.selected')}</span>
                 <button
                     onClick={clearMulti}
                     className="flex items-center gap-1 text-xs text-mut transition-colors hover:text-ink"
                 >
-                    <X size={12}/> Limpar
+                    <X size={12}/> {t('common.clear')}
                 </button>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
                 <button
                     onClick={() => void deleteSelected()}
-                    title="Mover selecionados para a lixeira (Ctrl+D)"
+                    title={t('main.trash')}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20"
                 >
-                    <Trash2 size={13}/> Lixeira
+                    <Trash2 size={13}/> {t('main.trash')}
                 </button>
                 <select
                     defaultValue=""
@@ -299,14 +303,14 @@ function BatchBar({count}: {count: number}) {
                         if (v) void setCategorySelected(v === '__none__' ? '' : v)
                         e.target.value = ''
                     }}
-                    title="Mover para categoria"
+                    title={t('batch.moveCategory')}
                     className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-edge bg-input px-2.5 py-1.5 text-xs font-medium text-soft outline-none"
                 >
-                    <option value="" disabled>Mover p/ categoria...</option>
+                    <option value="" disabled>{t('batch.moveCategory')}</option>
                     {categories.map((c) => (
                         <option key={c} value={c}>{c}</option>
                     ))}
-                    <option value="__none__">Sem categoria</option>
+                    <option value="__none__">{t('batch.noCategory')}</option>
                 </select>
                 <div className="flex items-center rounded-lg border border-edge bg-input">
                     <TagIcon size={13} className="ml-2 text-faint"/>
@@ -319,13 +323,13 @@ function BatchBar({count}: {count: number}) {
                                 setTagText('')
                             }
                         }}
-                        placeholder="Tag..."
-                        title="Adicionar tag aos selecionados (Enter)"
+                        placeholder={t('batch.tagPh')}
+                        title={t('batch.tagPh')}
                         className="w-24 bg-transparent px-2 py-1.5 text-xs text-ink placeholder:text-faint outline-none"
                     />
                 </div>
                 <button onClick={() => void toggleFavoriteSelected()} className={actionClass}>
-                    <Star size={13}/> Favoritos
+                    <Star size={13}/> {t('batch.favorites')}
                 </button>
                 <button onClick={() => void exportSelected('csv')} className={actionClass}>
                     <Download size={13}/> CSV
@@ -339,6 +343,7 @@ function BatchBar({count}: {count: number}) {
 }
 
 function ItemList() {
+    const t = useT()
     const items = useApp((s) => s.items)
     const selectedId = useApp((s) => s.selectedId)
     const search = useApp((s) => s.search)
@@ -431,11 +436,11 @@ function ItemList() {
                                 ref={searchRef}
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Buscar (Ctrl+F)..."
+                                placeholder={t('main.searchPh')}
                                 className="w-full rounded-lg border border-edge bg-input py-2 pl-9 pr-3 text-sm text-ink placeholder:text-faint outline-none focus:border-indigo-500/60"
                             />
                         </div>
-                        <IconButton title="Novo item (Ctrl+N)" onClick={() => void createItem({})}>
+                        <IconButton title={`${t('main.newItem')} (Ctrl+N)`} onClick={() => void createItem({})}>
                             <Plus size={18}/>
                         </IconButton>
                     </div>
@@ -451,7 +456,7 @@ function ItemList() {
                     className={`flex items-center gap-2 text-xs font-medium transition-colors ${
                         allSelected ? 'text-accent' : 'text-mut hover:text-ink'
                     } disabled:opacity-40`}
-                    title="Selecionar todos (Ctrl+A)"
+                    title={`${t('common.selectAll')} (Ctrl+A)`}
                 >
                     <span className="flex h-4 w-4 items-center justify-center rounded border border-edge bg-input">
                         {allSelected ? (
@@ -460,14 +465,14 @@ function ItemList() {
                             <Minus size={12}/>
                         ) : null}
                     </span>
-                    Selecionar todos
+                    {t('common.selectAll')}
                 </button>
                 <span className="text-xs text-faint">{filtered.length}</span>
             </div>
 
             <div className="flex-1 overflow-y-auto px-2 pb-3">
                 {filtered.length === 0 ? (
-                    <div className="px-3 py-8 text-center text-sm text-faint">Nenhum item encontrado.</div>
+                    <div className="px-3 py-8 text-center text-sm text-faint">{t('main.noItems')}</div>
                 ) : (
                     <div className="space-y-0.5">
                         {filtered.map((item, index) => (
@@ -498,7 +503,8 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
 }) {
     const domain = item.type === 'login' && item.url ? extractDomain(item.url) : ''
     const breached = useApp((s) => s.breachedIds.includes(item.id))
-    const {code: totp, remaining} = useTOTPCode(item.totpSecret || undefined)
+    const {code: totp} = useTOTPCode(item.totpSecret || undefined)
+    const t = useT()
     return (
         <div
             onClick={onRowClick}
@@ -509,7 +515,7 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
             <button
                 type="button"
                 onClick={onCheckboxClick}
-                title={multiChecked ? 'Remover da seleção' : 'Selecionar (Shift+clique = intervalo)'}
+                title={t('common.selectAll')}
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
                     multiChecked
                         ? 'border-accent bg-accent text-white'
@@ -522,16 +528,16 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
             <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                     <span className={`truncate text-sm font-medium ${selected ? 'text-accent' : 'text-soft'}`}>
-                        {item.title || 'Sem título'}
+                        {item.title || t('detail.noTitle')}
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
                         {totp && (
                             <button
                                 type="button"
-                                title={`Copiar código 2FA (${remaining}s)`}
+                                title={t('totp.copyCode')}
                                 onClick={(e) => {
                                     e.stopPropagation()
-                                    void safeCopy(totp, 'Código 2FA copiado')
+                                    void safeCopy(totp, t('totp.codeCopied'))
                                 }}
                                 className="font-mono text-xs font-semibold text-accent hover:underline"
                             >
@@ -539,7 +545,7 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
                             </button>
                         )}
                         {breached && (
-                            <span title="Senha vazada" className="text-red-400">
+                            <span title={t('watch.breached')} className="text-red-400">
                                 <AlertTriangle size={13}/>
                             </span>
                         )}
@@ -572,6 +578,8 @@ function TrashView() {
     const toggleMulti = useApp((s) => s.toggleMulti)
     const setMulti = useApp((s) => s.setMulti)
     const clearMulti = useApp((s) => s.clearMulti)
+    const lang = useApp((s) => s.lang)
+    const t = useT()
 
     useEffect(() => {
         void loadTrash().catch(() => undefined)
@@ -579,10 +587,10 @@ function TrashView() {
 
     async function doPurge() {
         if (multiSelected.length === 0) return
-        if (!confirm(`Excluir permanentemente ${multiSelected.length} item(ns)? Não há como desfazer.`)) return
+        if (!confirm(t('trash.purgeConfirm', {n: multiSelected.length}))) return
         try {
             await purgeSelected()
-            toast.success('Itens excluídos permanentemente')
+            toast.success(t('trash.purged'))
         } catch (err) {
             toast.error(err instanceof Error ? err.message : String(err))
         }
@@ -590,10 +598,10 @@ function TrashView() {
 
     async function doEmpty() {
         if (trash.length === 0) return
-        if (!confirm(`Esvaziar a lixeira? ${trash.length} item(ns) serão apagados para sempre.`)) return
+        if (!confirm(t('trash.emptyConfirm', {n: trash.length}))) return
         try {
             await emptyTrash()
-            toast.success('Lixeira esvaziada')
+            toast.success(t('trash.emptied'))
         } catch (err) {
             toast.error(err instanceof Error ? err.message : String(err))
         }
@@ -602,7 +610,7 @@ function TrashView() {
     async function doRestore(id: string) {
         try {
             await restoreItem(id)
-            toast.success('Item restaurado')
+            toast.success(t('trash.restored'))
         } catch (err) {
             toast.error(err instanceof Error ? err.message : String(err))
         }
@@ -615,16 +623,16 @@ function TrashView() {
             <div className="flex items-center justify-between border-b border-edge px-3 py-2.5">
                 <div>
                     <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                        <Trash2 size={15} className="text-red-400"/> Lixeira
+                        <Trash2 size={15} className="text-red-400"/> {t('trash.title')}
                     </div>
-                    <div className="mt-0.5 text-xs text-faint">{trash.length} item(ns)</div>
+                    <div className="mt-0.5 text-xs text-faint">{trash.length} {t('trash.items')}</div>
                 </div>
                 <button
                     onClick={() => void doEmpty()}
                     disabled={trash.length === 0}
                     className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40"
                 >
-                    Esvaziar
+                    {t('trash.empty')}
                 </button>
             </div>
 
@@ -643,13 +651,13 @@ function TrashView() {
                         }}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-input px-2.5 py-1.5 text-xs font-medium text-soft hover:bg-hover hover:text-ink"
                     >
-                        <Undo2 size={13}/> Restaurar
+                        <Undo2 size={13}/> {t('common.restore')}
                     </button>
                     <button
                         onClick={() => void doPurge()}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20"
                     >
-                        <Trash2 size={13}/> Excluir p/ sempre
+                        <Trash2 size={13}/> {t('trash.purge')}
                     </button>
                 </div>
             )}
@@ -663,13 +671,13 @@ function TrashView() {
                     <span className="flex h-4 w-4 items-center justify-center rounded border border-edge bg-input">
                         {allSelected ? <Check size={12}/> : null}
                     </span>
-                    Selecionar todos
+                    {t('common.selectAll')}
                 </button>
             </div>
 
             <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
                 {trash.length === 0 ? (
-                    <div className="px-3 py-8 text-center text-sm text-faint">Lixeira vazia.</div>
+                    <div className="px-3 py-8 text-center text-sm text-faint">{t('trash.isEmpty')}</div>
                 ) : (
                     trash.map((item) => (
                         <div
@@ -679,7 +687,7 @@ function TrashView() {
                             <button
                                 type="button"
                                 onClick={() => toggleMulti(item.id)}
-                                title="Selecionar"
+                                title={t('common.selectAll')}
                                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
                                     multiSelected.includes(item.id)
                                         ? 'border-accent bg-accent text-white'
@@ -689,14 +697,14 @@ function TrashView() {
                                 {multiSelected.includes(item.id) ? <Check size={13}/> : null}
                             </button>
                             <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-medium text-soft">{item.title || 'Sem título'}</div>
+                                <div className="truncate text-sm font-medium text-soft">{item.title || t('detail.noTitle')}</div>
                                 <div className="mt-0.5 text-xs text-faint">
-                                    Excluído em {item.deletedAt ? new Date(item.deletedAt).toLocaleDateString('pt-BR') : '—'}
+                                    {t('trash.deletedAt')} {item.deletedAt ? new Date(item.deletedAt).toLocaleDateString(lang === 'en' ? 'en-US' : 'pt-BR') : '—'}
                                 </div>
                             </div>
                             <button
                                 type="button"
-                                title="Restaurar"
+                                title={t('trash.restore')}
                                 onClick={() => void doRestore(item.id)}
                                 className="rounded-lg p-1.5 text-mut opacity-0 transition-all hover:bg-hover hover:text-emerald-400 group-hover:opacity-100"
                             >
@@ -711,12 +719,13 @@ function TrashView() {
 }
 
 function TopBar({onNew}: {onNew: () => void}) {
+    const t = useT()
     const [showGenerator, setShowGenerator] = useState(false)
     const createItem = useApp((s) => s.createItem)
 
     function useGenerated(value: string) {
         setShowGenerator(false)
-        void createItem({password: value, title: 'Novo item'})
+        void createItem({password: value, title: t('detail.noTitle')})
     }
 
     useEffect(() => {
@@ -732,13 +741,13 @@ function TopBar({onNew}: {onNew: () => void}) {
 
     return (
         <header className="flex items-center justify-between border-b border-edge px-6 py-3">
-            <h1 className="text-sm font-semibold text-soft">Cofre de senhas</h1>
+            <h1 className="text-sm font-semibold text-soft">{t('main.vaultTitle')}</h1>
             <div className="flex items-center gap-2">
-                <Button variant="subtle" onClick={() => setShowGenerator(true)} title="Gerar senha (Ctrl+G)">
-                    <Dices size={16}/> Gerar senha
+                <Button variant="subtle" onClick={() => setShowGenerator(true)} title={`${t('main.genPw')} (Ctrl+G)`}>
+                    <Dices size={16}/> {t('main.genPw')}
                 </Button>
                 <Button onClick={onNew}>
-                    <Plus size={16}/> Novo item
+                    <Plus size={16}/> {t('main.newItem')}
                 </Button>
             </div>
             {showGenerator && <GeneratorModal onClose={() => setShowGenerator(false)} onUse={useGenerated}/>}
@@ -784,7 +793,7 @@ export function MainScreen() {
                 const state = useApp.getState()
                 const sel = state.items.find((i) => i.id === state.selectedId)
                 if (sel?.password) {
-                    void safeCopy(sel.password, 'Senha copiada')
+                    void safeCopy(sel.password, translate(state.lang, 'qa.copied'))
                 }
             }
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
@@ -792,7 +801,7 @@ export function MainScreen() {
                 const state = useApp.getState()
                 const sel = state.items.find((i) => i.id === state.selectedId)
                 if (sel?.username) {
-                    void safeCopy(sel.username, 'Usuário copiado')
+                    void safeCopy(sel.username, translate(state.lang, 'common.copied'))
                 }
             }
         }
@@ -824,6 +833,7 @@ export function MainScreen() {
                     onSelectItem={(id) => selectItem(id)}
                 />
             )}
+            <QuickAccess/>
         </div>
     )
 }
