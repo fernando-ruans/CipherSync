@@ -77,16 +77,3 @@ func TestNativeRequiresAssoc(t *testing.T) {
 		t.Fatalf("expected not-associated: %+v", res)
 	}
 }
-
-func TestSplitDriveRemote(t *testing.T) {
-	f, n, err := splitDriveRemote("folderABC/a.passapp")
-	if err != nil || f != "folderABC" || n != "a.passapp" {
-		t.Fatalf("bad split: %q %q %v", f, n, err)
-	}
-	if _, _, err := splitDriveRemote("nope"); err == nil {
-		t.Fatal("expected error")
-	}
-	if _, _, err := splitDriveRemote("/x"); err == nil {
-		t.Fatal("expected error")
-	}
-}

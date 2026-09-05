@@ -77,18 +77,6 @@ func (a *App) buildSyncProvider(v *Vault) (SyncProvider, string, error) {
 			return nil, "", errors.New("pasta de sincronização não configurada")
 		}
 		return &localProvider{dir: remote}, "", nil
-	case "drive":
-		if remote == "" {
-			return nil, "", errors.New("pasta do Google Drive não configurada")
-		}
-		client, _, err := a.driveAuthedClient()
-		if err != nil {
-			return nil, "", err
-		}
-		a.vaultMu.RLock()
-		file := a.vaultFile
-		a.vaultMu.RUnlock()
-		return &driveProvider{client: client}, remote + "/" + file, nil
 	default:
 		return nil, "", errors.New("sincronização não configurada")
 	}
@@ -106,13 +94,13 @@ func (a *App) GetSyncConfig() (map[string]string, error) {
 }
 
 // SetSyncConfig configures sync for the current vault. Provider "" disables.
-// For "local", remote is a folder path. For "drive", remote is a folder ID.
+// For "local", remote is a folder path.
 func (a *App) SetSyncConfig(provider, remote string) error {
 	v := a.currentVault()
 	if v == nil {
 		return ErrVaultLocked
 	}
-	if provider != "" && provider != "local" && provider != "drive" {
+	if provider != "" && provider != "local" {
 		return errors.New("provedor desconhecido")
 	}
 	if provider == "local" {

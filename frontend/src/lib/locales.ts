@@ -333,11 +333,6 @@ const dict = {
         'sync.now': 'Sincronizar agora',
         'sync.done': 'Sincronizado: {res}',
         'sync.disconnect': 'Desconectar',
-        'sync.driveHelp': 'Crie um projeto no Google Cloud Console (OAuth client ID para app Desktop), cole as credenciais, conecte e crie a pasta.',
-        'sync.driveConnect': 'Conectar Google',
-        'sync.driveFolder': 'Criar/usar pasta',
-        'sync.driveConnected': 'Google conectado: {email}',
-        'sync.driveFolderOk': 'Pasta do Drive configurada',
 
         'toast.itemDeleted': 'Item excluído',
         'toast.vaultLocked': 'Cofre bloqueado',
@@ -698,11 +693,6 @@ const dict = {
         'sync.now': 'Sync now',
         'sync.done': 'Synced: {res}',
         'sync.disconnect': 'Disconnect',
-        'sync.driveHelp': 'Create a project in Google Cloud Console (OAuth client ID for Desktop app), paste credentials, connect and create the folder.',
-        'sync.driveConnect': 'Connect Google',
-        'sync.driveFolder': 'Create/use folder',
-        'sync.driveConnected': 'Google connected: {email}',
-        'sync.driveFolderOk': 'Drive folder configured',
 
         'toast.itemDeleted': 'Item deleted',
         'toast.vaultLocked': 'Vault locked',

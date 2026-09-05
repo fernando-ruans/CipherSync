@@ -12,9 +12,7 @@ require (
 	github.com/tobischo/gokeepasslib/v3 v3.7.0
 	github.com/trustelem/zxcvbn v1.0.1
 	github.com/wailsapp/wails/v2 v2.13.0
-	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.54.0
-	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.56.0
 )
@@ -23,7 +21,6 @@ require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
-	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dlclark/regexp2 v1.11.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect

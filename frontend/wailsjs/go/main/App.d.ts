@@ -32,12 +32,6 @@ export function DeleteVault(arg1:string):Promise<void>;
 
 export function DisconnectSync():Promise<void>;
 
-export function DriveConnect(arg1:string,arg2:string):Promise<string>;
-
-export function DriveDisconnect():Promise<void>;
-
-export function DriveSetupFolder():Promise<string>;
-
 export function ExportCSV():Promise<string>;
 
 export function ExportEncryptedJSON(arg1:string):Promise<string>;

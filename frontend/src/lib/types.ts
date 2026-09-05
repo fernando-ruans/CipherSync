@@ -183,9 +183,6 @@ export interface AppApi {
     DisconnectSync(): Promise<void>
     SyncNow(): Promise<string>
     GetSyncStatus(): Promise<SyncStatus>
-    DriveConnect(clientId: string, clientSecret: string): Promise<string>
-    DriveDisconnect(): Promise<void>
-    DriveSetupFolder(): Promise<string>
     InstallNativeHost(chromeExtID: string, firefoxAddonID: string): Promise<void>
     UninstallNativeHost(): Promise<void>
     GeneratePairingCode(): Promise<string>

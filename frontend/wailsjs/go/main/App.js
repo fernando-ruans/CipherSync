@@ -62,18 +62,6 @@ export function DisconnectSync() {
   return window['go']['main']['App']['DisconnectSync']();
 }
 
-export function DriveConnect(arg1, arg2) {
-  return window['go']['main']['App']['DriveConnect'](arg1, arg2);
-}
-
-export function DriveDisconnect() {
-  return window['go']['main']['App']['DriveDisconnect']();
-}
-
-export function DriveSetupFolder() {
-  return window['go']['main']['App']['DriveSetupFolder']();
-}
-
 export function ExportCSV() {
   return window['go']['main']['App']['ExportCSV']();
 }

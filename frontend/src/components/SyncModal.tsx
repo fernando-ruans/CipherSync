@@ -1,13 +1,13 @@
 import {useEffect, useState} from 'react'
 import toast from 'react-hot-toast'
-import {Cloud, FolderSync, Loader2, RefreshCw, Unplug} from 'lucide-react'
+import {FolderSync, Loader2, RefreshCw, Unplug} from 'lucide-react'
 import {api, errorMessage} from '../lib/api'
 import {useApp} from '../state'
 import {Button, Input, Modal} from './ui'
 import {useT} from '../lib/locales'
 import type {SyncStatus} from '../lib/types'
 
-type Provider = '' | 'local' | 'drive'
+type Provider = '' | 'local'
 
 export function SyncModal({onClose}: {onClose: () => void}) {
     const t = useT()
@@ -18,9 +18,6 @@ export function SyncModal({onClose}: {onClose: () => void}) {
     const [status, setStatus] = useState<SyncStatus | null>(null)
     const [loading, setLoading] = useState(false)
     const [saving, setSaving] = useState(false)
-    const [clientId, setClientId] = useState('')
-    const [clientSecret, setClientSecret] = useState('')
-    const [driveEmail, setDriveEmail] = useState('')
 
     async function load() {
         try {
@@ -53,11 +50,7 @@ export function SyncModal({onClose}: {onClose: () => void}) {
 
     async function disconnect() {
         try {
-            if (provider === 'drive') {
-                await api.driveDisconnect()
-            } else {
-                await api.disconnectSync()
-            }
+            await api.disconnectSync()
             setProvider('')
             setRemote('')
             toast.success(t('sync.disconnected'))
@@ -83,34 +76,6 @@ export function SyncModal({onClose}: {onClose: () => void}) {
         }
     }
 
-    async function connectDrive() {
-        setLoading(true)
-        try {
-            const email = await api.driveConnect(clientId, clientSecret)
-            setDriveEmail(email)
-            toast.success(t('sync.driveConnected', {email: email || ''}))
-        } catch (err) {
-            toast.error(await errorMessage(err))
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    async function setupDriveFolder() {
-        setLoading(true)
-        try {
-            const folderId = await api.driveSetupFolder()
-            setRemote(folderId)
-            setProvider('drive')
-            await load()
-            toast.success(t('sync.driveFolderOk'))
-        } catch (err) {
-            toast.error(await errorMessage(err))
-        } finally {
-            setLoading(false)
-        }
-    }
-
     const stateColor =
         status?.state === 'ok' ? 'text-emerald-400'
         : status?.state === 'conflict' ? 'text-amber-400'
@@ -122,11 +87,10 @@ export function SyncModal({onClose}: {onClose: () => void}) {
             <div className="space-y-4">
                 <div>
                     <span className="mb-1.5 block text-xs font-medium text-mut">{t('sync.provider')}</span>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                         {(
                             [
                                 ['local', t('sync.local'), <FolderSync key="l" size={16}/>],
-                                ['drive', 'Google Drive', <Cloud key="d" size={16}/>],
                                 ['', t('sync.off'), <Unplug key="o" size={16}/>],
                             ] as const
                         ).map(([v, label, icon]) => (
@@ -155,30 +119,8 @@ export function SyncModal({onClose}: {onClose: () => void}) {
                     />
                 )}
 
-                {provider === 'drive' && (
-                    <div className="space-y-3 rounded-lg border border-edge bg-input p-3">
-                        <p className="text-xs text-faint">{t('sync.driveHelp')}</p>
-                        <Input label="Google Client ID" value={clientId} onChange={setClientId}/>
-                        <Input label="Google Client Secret" type="password" value={clientSecret} onChange={setClientSecret}/>
-                        <div className="flex gap-2">
-                            <Button variant="subtle" className="flex-1" onClick={() => void connectDrive()} disabled={loading}>
-                                {t('sync.driveConnect')}
-                            </Button>
-                            <Button variant="subtle" className="flex-1" onClick={() => void setupDriveFolder()} disabled={loading}>
-                                {t('sync.driveFolder')}
-                            </Button>
-                        </div>
-                        {(driveEmail || remote) && (
-                            <p className="text-xs text-mut">
-                                {driveEmail && <span className="mr-2">{driveEmail}</span>}
-                                {remote && <span className="font-mono text-[11px]">{remote}</span>}
-                            </p>
-                        )}
-                    </div>
-                )}
-
                 <div className="flex gap-2">
-                    <Button variant="subtle" className="flex-1" onClick={() => void save()} disabled={saving || (provider !== '' && provider !== 'drive' && !remote.trim())}>
+                    <Button variant="subtle" className="flex-1" onClick={() => void save()} disabled={saving || (provider !== '' && !remote.trim())}>
                         {t('common.save')}
                     </Button>
                     {provider !== '' && (

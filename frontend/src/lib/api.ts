@@ -69,10 +69,6 @@ export const api = {
     disconnectSync: (): Promise<void> => window.go.main.App.DisconnectSync(),
     syncNow: (): Promise<string> => window.go.main.App.SyncNow(),
     getSyncStatus: (): Promise<import('./types').SyncStatus> => window.go.main.App.GetSyncStatus(),
-    driveConnect: (clientId: string, clientSecret: string): Promise<string> =>
-        window.go.main.App.DriveConnect(clientId, clientSecret),
-    driveDisconnect: (): Promise<void> => window.go.main.App.DriveDisconnect(),
-    driveSetupFolder: (): Promise<string> => window.go.main.App.DriveSetupFolder(),
     installNativeHost: (chromeExtID: string, firefoxAddonID: string): Promise<void> =>
         window.go.main.App.InstallNativeHost(chromeExtID, firefoxAddonID),
     uninstallNativeHost: (): Promise<void> => window.go.main.App.UninstallNativeHost(),
