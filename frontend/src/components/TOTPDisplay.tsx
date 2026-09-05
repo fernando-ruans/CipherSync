@@ -1,7 +1,8 @@
 import {useEffect, useState} from 'react'
-import toast from 'react-hot-toast'
 import {Copy} from 'lucide-react'
-import {api} from '../lib/api'
+import {localTOTP} from '../lib/totp'
+import {safeCopy} from '../lib/util'
+import {useApp} from '../state'
 
 function CountdownRing({seconds, total = 30}: {seconds: number; total?: number}) {
     const radius = 26
@@ -29,6 +30,7 @@ function CountdownRing({seconds, total = 30}: {seconds: number; total?: number})
 }
 
 export function TOTPDisplay({itemId}: {itemId: string}) {
+    const secret = useApp((s) => s.items.find((i) => i.id === itemId)?.totpSecret ?? '')
     const [code, setCode] = useState('')
     const [seconds, setSeconds] = useState(0)
     const [error, setError] = useState(false)
@@ -36,11 +38,15 @@ export function TOTPDisplay({itemId}: {itemId: string}) {
     useEffect(() => {
         let alive = true
         const tick = async () => {
+            if (!secret) {
+                if (alive) setError(true)
+                return
+            }
             try {
-                const c = await api.getTOTPCode(itemId)
+                const c = await localTOTP(secret)
                 if (alive) {
                     setCode(c.code)
-                    setSeconds(c.secondsRemaining)
+                    setSeconds(c.remaining)
                     setError(false)
                 }
             } catch {
@@ -53,13 +59,12 @@ export function TOTPDisplay({itemId}: {itemId: string}) {
             alive = false
             clearInterval(id)
         }
-    }, [itemId])
+    }, [secret])
 
-    if (error) return null
+    if (error || !secret) return null
 
     async function copy() {
-        await api.copy(code)
-        toast.success('Código copiado')
+        await safeCopy(code, 'Código copiado')
     }
 
     return (
@@ -80,4 +85,32 @@ export function TOTPDisplay({itemId}: {itemId: string}) {
             </div>
         </div>
     )
+}
+
+// useTOTPCode computes the current code locally for inline displays.
+export function useTOTPCode(secret: string | undefined) {
+    const [state, setState] = useState({code: '', remaining: 0})
+    useEffect(() => {
+        if (!secret) return
+        let alive = true
+        const tick = async () => {
+            try {
+                const c = await localTOTP(secret)
+                if (!alive) return
+                setState((prev) => {
+                    if (prev.code === c.code && prev.remaining === c.remaining) return prev
+                    return {code: c.code, remaining: c.remaining}
+                })
+            } catch {
+                // ignore
+            }
+        }
+        void tick()
+        const id = setInterval(tick, 1000)
+        return () => {
+            alive = false
+            clearInterval(id)
+        }
+    }, [secret])
+    return state
 }

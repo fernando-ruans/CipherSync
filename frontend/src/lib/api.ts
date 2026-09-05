@@ -28,6 +28,20 @@ export const api = {
     updateItem: (item: import('./types').Item): Promise<void> => window.go.main.App.UpdateItem(item),
     deleteItem: (id: string): Promise<void> => window.go.main.App.DeleteItem(id),
     deleteItems: (ids: string[]): Promise<void> => window.go.main.App.DeleteItems(ids),
+    listTrashed: (): Promise<import('./types').Item[]> => window.go.main.App.ListTrashed(),
+    restoreTrashed: (id: string): Promise<void> => window.go.main.App.RestoreTrashed(id),
+    purgeTrashed: (ids: string[]): Promise<void> => window.go.main.App.PurgeTrashed(ids),
+    setTrashDays: (days: number): Promise<void> => window.go.main.App.SetTrashDays(days),
+    addAttachment: (itemId: string, name: string, dataB64: string): Promise<import('./types').Attachment> =>
+        window.go.main.App.AddAttachment(itemId, name, dataB64),
+    listAttachments: (itemId: string): Promise<import('./types').Attachment[]> =>
+        window.go.main.App.ListAttachments(itemId),
+    getAttachment: (id: string): Promise<import('./types').AttachmentPayload> =>
+        window.go.main.App.GetAttachment(id),
+    deleteAttachment: (id: string): Promise<void> => window.go.main.App.DeleteAttachment(id),
+    backupNow: (): Promise<string> => window.go.main.App.BackupNow(),
+    importKeePassDB: (dataB64: string, password: string): Promise<import('./types').ImportResult> =>
+        window.go.main.App.ImportKeePassDB(dataB64, password),
     setCategoryBatch: (ids: string[], category: string): Promise<void> =>
         window.go.main.App.SetCategoryBatch(ids, category),
     addTagBatch: (ids: string[], tag: string): Promise<void> => window.go.main.App.AddTagBatch(ids, tag),

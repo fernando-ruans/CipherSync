@@ -6,7 +6,7 @@ import {useApp} from '../state'
 import {Button, Input, Modal} from './ui'
 import type {FieldMapping, ImportResult, Item} from '../lib/types'
 
-type Format = 'auto' | 'bitwarden' | 'csv' | 'transfer'
+type Format = 'auto' | 'bitwarden' | 'csv' | 'transfer' | 'keepass'
 
 const FIELDS = [
     {value: 'ignore', label: 'Ignorar'},
@@ -22,6 +22,8 @@ export function ImportModal({onClose}: {onClose: () => void}) {
     const [format, setFormat] = useState<Format>('auto')
     const [fileName, setFileName] = useState('')
     const [transferPw, setTransferPw] = useState('')
+    const [keepassPw, setKeepassPw] = useState('')
+    const [keepassB64, setKeepassB64] = useState('')
     const [headers, setHeaders] = useState<string[]>([])
     const [mapping, setMapping] = useState<FieldMapping[]>([])
     const [result, setResult] = useState<ImportResult | null>(null)
@@ -30,11 +32,34 @@ export function ImportModal({onClose}: {onClose: () => void}) {
     const fileRef = useRef<HTMLInputElement>(null)
     const importItems = useApp((s) => s.importItems)
 
+    function fileToB64(file: File): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => {
+                const buf = reader.result as ArrayBuffer
+                const bytes = new Uint8Array(buf)
+                let bin = ''
+                const chunk = 0x8000
+                for (let i = 0; i < bytes.length; i += chunk) {
+                    bin += String.fromCharCode(...bytes.subarray(i, i + chunk))
+                }
+                resolve(btoa(bin))
+            }
+            reader.onerror = () => reject(new Error('falha ao ler o arquivo'))
+            reader.readAsArrayBuffer(file)
+        })
+    }
+
     async function onFile(file: File) {
         setFileName(file.name)
         setResult(null)
         setLoading(true)
         try {
+            if (format === 'keepass') {
+                setKeepassB64(await fileToB64(file))
+                setResult(null)
+                return
+            }
             const text = await file.text()
             if (format === 'bitwarden') {
                 setResult(await api.importBitwardenJSON(text))
@@ -48,10 +73,10 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                 setResult(await api.importEncryptedTransfer(text.trim(), transferPw))
             } else {
                 const lines = text.split(/\r?\n/)
-                const head = lines[0]?.split(',').map((h, i) => (h.trim() || `Coluna ${i + 1}`))
-                setHeaders(head ?? [])
+                const head = parseCSVHeaderLine(lines[0] ?? '')
+                setHeaders(head)
                 setMapping(
-                    (head ?? []).map((_, i) => ({
+                    head.map((_, i) => ({
                         column: i,
                         field: i === 0 ? 'title' : i === 1 ? 'username' : i === 2 ? 'password' : 'ignore',
                     })),
@@ -59,6 +84,53 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                 setResult(null)
                 setRawCSV(text)
             }
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // parseCSVHeaderLine splits a header row respecting quotes
+    // (handles: title,"my, title",username) and ; delimiters (Excel BR)
+    function parseCSVHeaderLine(line: string): string[] {
+        const count = (s: string, ch: string) => s.split(ch).length - 1
+        const delim = count(line, ';') > count(line, ',') ? ';' : ','
+        const out: string[] = []
+        let cur = ''
+        let inQuotes = false
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i]
+            if (ch === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    cur += '"'
+                    i++
+                } else {
+                    inQuotes = !inQuotes
+                }
+            } else if (ch === delim && !inQuotes) {
+                out.push(cur.trim() || `Coluna ${out.length + 1}`)
+                cur = ''
+            } else {
+                cur += ch
+            }
+        }
+        out.push(cur.trim() || `Coluna ${out.length + 1}`)
+        return out
+    }
+
+    async function runKeePassImport() {
+        if (!keepassB64) {
+            toast.error('Selecione o arquivo .kdbx')
+            return
+        }
+        if (!keepassPw) {
+            toast.error('Digite a senha do banco KeePass')
+            return
+        }
+        setLoading(true)
+        try {
+            setResult(await api.importKeePassDB(keepassB64, keepassPw))
         } catch (err) {
             toast.error(await errorMessage(err))
         } finally {
@@ -94,6 +166,7 @@ export function ImportModal({onClose}: {onClose: () => void}) {
     const formatOptions: {value: Format; label: string; hint: string}[] = [
         {value: 'auto', label: 'CSV (Chrome / Firefox / LastPass / 1Password)', hint: 'Detecção automática de colunas'},
         {value: 'bitwarden', label: 'Bitwarden JSON', hint: 'Exportação .json não criptografada (todos os tipos de item)'},
+        {value: 'keepass', label: 'KeePass (.kdbx)', hint: 'Banco KeePass v3/v4 com senha'},
         {value: 'csv', label: 'CSV genérico', hint: 'Escolha manualmente o que cada coluna representa'},
         {value: 'transfer', label: 'Transferência CipherSync', hint: 'Arquivo .passapp criptografado'},
     ]
@@ -134,11 +207,25 @@ export function ImportModal({onClose}: {onClose: () => void}) {
                     />
                 )}
 
+                {format === 'keepass' && fileName && (
+                    <div className="space-y-3">
+                        <Input
+                            label="Senha do banco KeePass"
+                            type="password"
+                            value={keepassPw}
+                            onChange={setKeepassPw}
+                        />
+                        <Button variant="subtle" className="w-full" onClick={() => void runKeePassImport()} disabled={loading}>
+                            {loading ? <Loader2 size={16} className="animate-spin"/> : 'Analisar banco KeePass'}
+                        </Button>
+                    </div>
+                )}
+
                 <input
                     ref={fileRef}
                     type="file"
                     hidden
-                    accept={format === 'bitwarden' ? '.json' : format === 'transfer' ? '.passapp,.txt' : '.csv,.txt'}
+                    accept={format === 'bitwarden' ? '.json' : format === 'transfer' ? '.passapp,.txt' : format === 'keepass' ? '.kdbx' : '.csv,.txt'}
                     onChange={(e) => {
                         const f = e.target.files?.[0]
                         if (f) void onFile(f)

@@ -36,20 +36,23 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 - **4 tipos de item**: Login, Nota segura, Cartão de crédito e Identidade (campos dinâmicos por tipo).
 - CRUD completo, busca em tempo real (título, usuário, URL, notas, tags e campos), favoritos, categorias e **tags** com autocomplete.
 - **Histórico de versões**: snapshot a cada alteração (até 50 por item), diff visual e restauração.
-- **Multi-seleção e operações em lote**: excluir, mover para categoria, adicionar tag, favoritar e exportar os itens selecionados.
-- **Favicons** carregados automaticamente com cache local.
+- **Lixeira**: exclusões vão para a lixeira (restaurar ou purgar), com retenção configurável e limpeza automática.
+- **Anexos**: arquivos criptografados por item (máx. 10 MB), com download e remoção.
+- **Multi-seleção e operações em lote**: lixeira, mover para categoria, adicionar tag, favoritar e exportar os itens selecionados.
+- **Favicons** carregados automaticamente com cache local (TTL de 30 dias).
 
 ### Segurança avançada
-- **TOTP / 2FA integrado** — autenticador de 6 dígitos com QR code por **câmera**, **upload de imagem** ou **chave manual**, com círculo de contagem regressiva.
-- **Watchtower** — painel de saúde das senhas: senhas fracas, duplicadas, antigas, sem 2FA e vazadas, com score geral de 0–100%.
+- **TOTP / 2FA integrado** — autenticador de 6 dígitos com QR code por **câmera**, **upload de imagem** ou **chave manual**, com código inline na lista e círculo de contagem regressiva.
+- **Watchtower** — painel de saúde das senhas com análise **zxcvbn** (fracas, duplicadas com máscara, antigas, sem 2FA e vazadas), score geral de 0–100%.
 - **Detecção de vazamento (HIBP)** — verifica se suas senhas já vazaram usando **k-anonymity** (apenas os 5 primeiros caracteres do SHA-1 saem da sua máquina).
-- **Gerador de senhas** — aleatórias (comprimento/tipos de caractere) e por frases (palavras).
+- **Gerador de senhas** — aleatórias (comprimento/tipos), **presets de PIN** (4/6 dígitos) e frases por palavras.
+- **Backups automáticos** — snapshot diário ao desbloquear (mantidos os 10 mais recentes) + botão de backup manual.
 
 ### Experiência
 - **Múltiplos cofres** (pessoal, trabalho, família), cada um com sua própria senha mestra, com seletor na tela de desbloqueio.
 - **Auto-lock** configurável (1/5/15/30/60 min ou nunca) e bloqueio ao minimizar a janela.
 - **Temas** Dark / Light / Sistema com persistência.
-- **Importação** de Chrome, Firefox, Edge, LastPass, 1Password e Bitwarden.
+- **Importação** de Chrome, Firefox, Edge, LastPass, 1Password, Bitwarden e KeePass (.kdbx).
 - **Exportação** em CSV, JSON e transferência criptografada `.passapp` entre instâncias do CipherSync.
 - **Exclusão de conta** com confirmação por digitação (`DELETAR TUDO`).
 
@@ -107,7 +110,8 @@ Chave do cofre (vault key) ──► criptografa cada item individualmente
 | Crypto | golang.org/x/crypto (Argon2id), AES-256-GCM |
 | TOTP/QR | pquerna/otp + skip2/go-qrcode |
 | Scanner QR | jsqr (webcam/upload no frontend) |
-| Clipboard | atotto/clipboard com auto-clear |
+| Força de senha | zxcvbn (Go + JS) |
+| Clipboard | atotto/clipboard com auto-clear condicional |
 
 ---
 
@@ -138,8 +142,9 @@ O import é feito pelo menu **Importar** na sidebar:
 | CSV Firefox | Automática (título derivado do domínio) | Login |
 | CSV LastPass | Automática | Login |
 | CSV 1Password | Automática | Login |
-| CSV genérico | Mapeamento manual de colunas | Login |
+| CSV genérico (`;` incluído) | Mapeamento manual de colunas | Login |
 | Bitwarden JSON | Nativa | Login, Nota, Cartão, Identidade |
+| KeePass (.kdbx v3/v4) | Com senha do banco | Login |
 | Transferência CipherSync (`.passapp`) | Criptografada | Todos |
 
 O export gera **CSV**, **JSON** (com aviso de segurança) ou **transferência criptografada** com senha.
@@ -155,11 +160,13 @@ O export gera **CSV**, **JSON** (com aviso de segurança) ou **transferência cr
 | `Ctrl+S` | Salvar item em edição |
 | `Ctrl+B` | Copiar senha do item selecionado |
 | `Ctrl+Shift+C` | Copiar usuário do item selecionado |
+| `Ctrl+G` | Abrir gerador de senhas |
 | `Ctrl+A` | Selecionar todos os itens visíveis |
-| `Ctrl+D` | Excluir itens selecionados |
+| `Ctrl+D` | Mover itens selecionados para a lixeira |
 | `Ctrl+Shift` + clique | Seleção em intervalo |
 | `Ctrl+clique` | Selecionar item individual |
 | `Ctrl+L` | Bloquear o cofre |
+| `Esc` | Fechar modal / limpar seleção |
 | `Esc` | Fechar modal / limpar seleção |
 
 ---
@@ -232,7 +239,7 @@ Para regenerar os ícones a partir de `ciphersync-logo.png`:
 go test ./...
 ```
 
-Os testes cobrem: ciclo de vida do cofre, troca de senha mestra, migração de schema, batch operations, múltiplos cofres, import/export (CSV, Bitwarden, transferência), TOTP/QR e análise do Watchtower.
+Os testes cobrem: ciclo de vida do cofre, troca de senha mestra, migração de schema, batch operations, lixeira (trash/restore/purge/retenção), anexos, backup, múltiplos cofres, import/export (CSV, Bitwarden, KeePass, transferência), TOTP/QR e análise do Watchtower.
 
 Arquivos de teste de import em `testdata/`:
 - `1password_export.csv` — 50 cadastros no formato do 1Password

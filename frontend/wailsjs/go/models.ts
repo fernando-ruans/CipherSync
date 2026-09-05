@@ -1,5 +1,37 @@
 export namespace main {
 	
+	export class Attachment {
+	    id: string;
+	    name: string;
+	    size: number;
+	    addedAt: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Attachment(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.size = source["size"];
+	        this.addedAt = source["addedAt"];
+	    }
+	}
+	export class AttachmentPayload {
+	    name: string;
+	    data: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AttachmentPayload(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.data = source["data"];
+	    }
+	}
 	export class ItemRef {
 	    id: string;
 	    title: string;
@@ -131,6 +163,8 @@ export namespace main {
 	    fields: Record<string, string>;
 	    totpSecret: string;
 	    favorite: boolean;
+	    deleted: boolean;
+	    deletedAt: number;
 	    createdAt: number;
 	    updatedAt: number;
 	
@@ -152,6 +186,8 @@ export namespace main {
 	        this.fields = source["fields"];
 	        this.totpSecret = source["totpSecret"];
 	        this.favorite = source["favorite"];
+	        this.deleted = source["deleted"];
+	        this.deletedAt = source["deletedAt"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }

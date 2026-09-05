@@ -30,6 +30,9 @@ func main() {
 		Bind: []interface{}{
 			app,
 		},
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: "ciphersync-single-instance",
+		},
 	})
 
 	if err != nil {

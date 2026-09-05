@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import toast from 'react-hot-toast'
 import {
     AlertTriangle,
@@ -13,7 +13,7 @@ import {
     Trash2,
     User,
 } from 'lucide-react'
-import {useApp} from '../state'
+import {useApp, setUnsavedItem} from '../state'
 import {api, errorMessage} from '../lib/api'
 import {Button, IconButton, Input, RevealInput} from './ui'
 import {GeneratorModal} from './GeneratorModal'
@@ -21,8 +21,9 @@ import {VersionHistoryModal} from './VersionHistory'
 import {TagInput} from './TagInput'
 import {TOTPSetupModal} from './TOTPSetupModal'
 import {TOTPDisplay} from './TOTPDisplay'
+import {AttachmentsSection} from './AttachmentsSection'
 import {TYPE_FIELDS, ITEM_TYPES} from '../lib/fields'
-import {extractDomain} from '../lib/util'
+import {extractDomain, safeCopy} from '../lib/util'
 import type {Item, ItemType} from '../lib/types'
 
 function SecretRow({
@@ -43,7 +44,7 @@ function SecretRow({
             <div className="flex-1">
                 <RevealInput label={label} value={value} onChange={onChange} placeholder={placeholder}/>
             </div>
-            <IconButton title="Copiar" onClick={() => void api.copy(value).then(() => toast.success('Copiado!'))}>
+            <IconButton title="Copiar" onClick={() => void safeCopy(value)}>
                 <Copy size={15}/>
             </IconButton>
             {onGenerate && (
@@ -66,7 +67,7 @@ function CopyRow({label, value, placeholder, onChange}: {
             <div className="flex-1">
                 <Input label={label} value={value} onChange={onChange} placeholder={placeholder}/>
             </div>
-            <IconButton title="Copiar" onClick={() => void api.copy(value).then(() => toast.success('Copiado!'))}>
+            <IconButton title="Copiar" onClick={() => void safeCopy(value)}>
                 <Copy size={15}/>
             </IconButton>
         </div>
@@ -88,10 +89,42 @@ export function ItemDetail() {
     const [generatorField, setGeneratorField] = useState('')
     const [showHistory, setShowHistory] = useState(false)
     const [showTOTPSetup, setShowTOTPSetup] = useState(false)
+    const appliedRef = useRef('')
 
     useEffect(() => {
-        setDraft(item ? {...item} : null)
+        if (!item) {
+            setDraft(null)
+            appliedRef.current = ''
+            setUnsavedItem(null)
+            return
+        }
+        const key = `${item.id}:${item.updatedAt}`
+        if (key === appliedRef.current) return // same content, keep the draft
+        appliedRef.current = key
+        setDraft({...item})
     }, [item])
+
+    // register unsaved edits so navigation can ask for confirmation
+    useEffect(() => {
+        if (!item || !draft) {
+            setUnsavedItem(null)
+            return
+        }
+        setUnsavedItem(JSON.stringify(draft) !== JSON.stringify(item) ? item.id : null)
+    }, [draft, item])
+
+    // Ctrl+S saves the current item
+    const saveRef = useRef<() => Promise<void>>(async () => {})
+    useEffect(() => {
+        function onKey(e: KeyboardEvent) {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                e.preventDefault()
+                void saveRef.current()
+            }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [])
 
     if (!item || !draft) {
         return (
@@ -118,6 +151,10 @@ export function ItemDetail() {
 
     function changeType(type: ItemType) {
         if (!draft) return
+        const hasFields = Object.keys(draft.fields ?? {}).some((k) => (draft.fields[k] ?? '').trim() !== '')
+        if (hasFields && !confirm('Trocar o tipo apaga os campos específicos preenchidos. Continuar?')) {
+            return
+        }
         setDraft({...draft, type, fields: {}})
     }
 
@@ -133,13 +170,14 @@ export function ItemDetail() {
             setSaving(false)
         }
     }
+    saveRef.current = save
 
     async function del() {
         if (!item) return
-        if (!confirm(`Excluir "${item.title}"? Essa ação não pode ser desfeita.`)) return
+        if (!confirm(`Mover "${item.title}" para a lixeira? Você pode restaurá-lo depois.`)) return
         try {
             await removeItem(item.id)
-            toast.success('Item excluído')
+            toast.success('Item movido para a lixeira')
         } catch (err) {
             toast.error(await errorMessage(err))
         }
@@ -158,17 +196,25 @@ export function ItemDetail() {
 
     async function saveTOTP(secret: string) {
         if (!draft) return
-        await updateItem({...draft, totpSecret: secret})
-        setDraft({...draft, totpSecret: secret})
-        setShowTOTPSetup(false)
-        toast.success('2FA configurado')
+        try {
+            await updateItem({...draft, totpSecret: secret})
+            setDraft({...draft, totpSecret: secret})
+            setShowTOTPSetup(false)
+            toast.success('2FA configurado')
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        }
     }
 
     async function removeTOTP() {
         if (!draft) return
         if (!confirm('Remover o 2FA deste item?')) return
-        await updateItem({...draft, totpSecret: ''})
-        setDraft({...draft, totpSecret: ''})
+        try {
+            await updateItem({...draft, totpSecret: ''})
+            setDraft({...draft, totpSecret: ''})
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        }
     }
 
     const domain = draft.url ? extractDomain(draft.url) : ''
@@ -261,7 +307,7 @@ export function ItemDetail() {
 
                 {(draft.type === 'credit_card' || draft.type === 'identity') && (
                     <div className="grid grid-cols-2 gap-3">
-                        {TYPE_FIELDS[draft.type].map((f) =>
+                        {(TYPE_FIELDS[draft.type as keyof typeof TYPE_FIELDS] ?? []).map((f) =>
                             f.secret ? (
                                 <div key={f.key} className="col-span-2">
                                     <SecretRow
@@ -307,6 +353,8 @@ export function ItemDetail() {
                 </div>
             </div>
 
+            <AttachmentsSection itemId={item.id}/>
+
             <div className="mt-6 flex items-center justify-between border-t border-edge pt-4">
                 <div className="flex items-center gap-4 text-xs text-faint">
                     <span className="flex items-center gap-1">
@@ -319,7 +367,13 @@ export function ItemDetail() {
                 </Button>
             </div>
 
-            {showGenerator && <GeneratorModal onClose={() => setShowGenerator(null)} onUse={useGenerated}/>}
+            {showGenerator && (
+                <GeneratorModal
+                    onClose={() => setShowGenerator(null)}
+                    onUse={useGenerated}
+                    preset={generatorField === 'password' ? 'password' : 'pin'}
+                />
+            )}
             {showHistory && <VersionHistoryModal itemId={item.id} onClose={() => setShowHistory(false)}/>}
             {showTOTPSetup && <TOTPSetupModal onClose={() => setShowTOTPSetup(false)} onSave={saveTOTP}/>}
         </div>

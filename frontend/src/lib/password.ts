@@ -1,5 +1,9 @@
+import zxcvbn from 'zxcvbn'
+
 export function passwordScore(pw: string): number {
     if (!pw) return 0
+    // zxcvbn: real pattern/dictionary analysis (0-4)
+    const zx = zxcvbn(pw).score
     let score = 0
     if (pw.length >= 8) score++
     if (pw.length >= 14) score++
@@ -11,6 +15,7 @@ export function passwordScore(pw: string): number {
     ].filter(Boolean).length
     if (variety >= 3) score++
     if (variety === 4 && pw.length >= 12) score++
+    if (zx < score) score = zx
     return Math.min(4, score)
 }
 

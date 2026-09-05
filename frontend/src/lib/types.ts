@@ -13,6 +13,8 @@ export interface Item {
     fields: Record<string, string>
     totpSecret: string
     favorite: boolean
+    deleted: boolean
+    deletedAt: number
     createdAt: number
     updatedAt: number
 }
@@ -24,6 +26,18 @@ export interface PasswordOptions {
     useDigits: boolean
     useSymbols: boolean
     excludeAmbiguous: boolean
+}
+
+export interface Attachment {
+    id: string
+    name: string
+    size: number
+    addedAt: number
+}
+
+export interface AttachmentPayload {
+    name: string
+    data: string
 }
 
 export interface VersionEntry {
@@ -112,6 +126,16 @@ export interface AppApi {
     UpdateItem(input: Item): Promise<void>
     DeleteItem(id: string): Promise<void>
     DeleteItems(ids: string[]): Promise<void>
+    ListTrashed(): Promise<Item[]>
+    RestoreTrashed(id: string): Promise<void>
+    PurgeTrashed(ids: string[]): Promise<void>
+    SetTrashDays(days: number): Promise<void>
+    AddAttachment(itemId: string, name: string, dataB64: string): Promise<Attachment>
+    ListAttachments(itemId: string): Promise<Attachment[]>
+    GetAttachment(id: string): Promise<AttachmentPayload>
+    DeleteAttachment(id: string): Promise<void>
+    BackupNow(): Promise<string>
+    ImportKeePassDB(dataB64: string, password: string): Promise<ImportResult>
     SetCategoryBatch(ids: string[], category: string): Promise<void>
     AddTagBatch(ids: string[], tag: string): Promise<void>
     SetFavoriteBatch(ids: string[], favorite: boolean): Promise<void>

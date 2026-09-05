@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,10 +18,12 @@ import (
 )
 
 const clipboardClearDelay = 60 * time.Second
+const maxBackupsPerVault = 10
 
 // App is the root application object exposed to the frontend.
 type App struct {
 	ctx       context.Context
+	vaultMu   sync.RWMutex
 	vault     *Vault
 	vaultFile string
 	vaultName string
@@ -37,11 +42,26 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// currentVault returns the unlocked vault or nil (safe for goroutines).
+func (a *App) currentVault() *Vault {
+	a.vaultMu.RLock()
+	defer a.vaultMu.RUnlock()
+	if a.vault == nil || a.vault.vaultKey == nil {
+		return nil
+	}
+	return a.vault
+}
+
+// validVaultFile prevents path traversal: only plain ".passapp" filenames.
+func validVaultFile(file string) bool {
+	return file != "" && filepath.Base(file) == file && strings.HasSuffix(file, ".passapp")
+}
+
 // VaultDir returns the directory that stores all vault files.
 func (a *App) VaultDir() string {
 	cfg, err := os.UserConfigDir()
 	if err != nil {
-		return filepath.Join(".", "locksync")
+		return filepath.Join(".", "ciphersync")
 	}
 	return filepath.Join(cfg, "LockSync")
 }
@@ -53,7 +73,7 @@ func (a *App) ListVaults() ([]VaultInfo, error) {
 
 // IsUnlocked reports whether a vault is currently unlocked.
 func (a *App) IsUnlocked() bool {
-	return a.vault != nil && a.vault.vaultKey != nil
+	return a.currentVault() != nil
 }
 
 // CreateVault creates a new named vault with the given master password and unlocks it.
@@ -89,9 +109,11 @@ func (a *App) CreateVault(name, password, confirm string) error {
 		v.close()
 		return err
 	}
+	a.vaultMu.Lock()
 	a.vault = v
 	a.vaultFile = file
 	a.vaultName = name
+	a.vaultMu.Unlock()
 	return nil
 }
 
@@ -100,8 +122,8 @@ func (a *App) OpenVault(file, password string) error {
 	if a.IsUnlocked() {
 		return errors.New("a vault is already unlocked")
 	}
-	if file == "" {
-		return errors.New("select a vault")
+	if !validVaultFile(file) {
+		return errors.New("invalid vault file")
 	}
 	if len(password) == 0 {
 		return errors.New("enter your master password")
@@ -111,6 +133,7 @@ func (a *App) OpenVault(file, password string) error {
 	if err != nil {
 		return err
 	}
+	a.vaultMu.Lock()
 	a.vault = v
 	a.vaultFile = file
 	if name, err := readVaultName(path); err == nil && name != "" {
@@ -118,11 +141,18 @@ func (a *App) OpenVault(file, password string) error {
 	} else {
 		a.vaultName = strings.TrimSuffix(file, ".passapp")
 	}
+	a.vaultMu.Unlock()
+	// daily automatic backup
+	go func() {
+		_, _ = a.autoBackup(v, file)
+	}()
 	return nil
 }
 
 // GetCurrentVaultName returns the display name of the unlocked vault.
 func (a *App) GetCurrentVaultName() string {
+	a.vaultMu.RLock()
+	defer a.vaultMu.RUnlock()
 	if a.vaultName == "" && a.vaultFile != "" {
 		return strings.TrimSuffix(a.vaultFile, ".passapp")
 	}
@@ -133,6 +163,9 @@ func (a *App) GetCurrentVaultName() string {
 func (a *App) DeleteVault(file string) error {
 	if a.IsUnlocked() {
 		a.Lock()
+	}
+	if !validVaultFile(file) {
+		return errors.New("invalid vault file")
 	}
 	path := filepath.Join(a.VaultDir(), file)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
@@ -153,7 +186,8 @@ func (a *App) DeleteAccount() error {
 
 // ChangeMasterPassword rotates the master password of the unlocked vault.
 func (a *App) ChangeMasterPassword(oldPassword, newPassword, confirm string) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
 	if len(newPassword) < 8 {
@@ -162,98 +196,267 @@ func (a *App) ChangeMasterPassword(oldPassword, newPassword, confirm string) err
 	if newPassword != confirm {
 		return errors.New("new passwords do not match")
 	}
-	return a.vault.changeMasterPassword(oldPassword, newPassword)
+	return v.changeMasterPassword(oldPassword, newPassword)
 }
 
 // Lock locks the currently unlocked vault and wipes keys from memory.
 func (a *App) Lock() {
-	if a.vault != nil {
-		a.vault.close()
-	}
+	a.vaultMu.Lock()
+	v := a.vault
 	a.vault = nil
 	a.vaultFile = ""
 	a.vaultName = ""
+	a.vaultMu.Unlock()
+	if v != nil {
+		v.close()
+	}
 }
 
-// GetItems returns all items of the unlocked vault.
+// GetItems returns all active (non-trashed) items of the unlocked vault.
 func (a *App) GetItems() ([]Item, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return nil, ErrVaultLocked
 	}
-	return a.vault.list(), nil
+	return v.list(), nil
 }
 
 // CreateItem adds a new item to the vault.
 func (a *App) CreateItem(input Item) (Item, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return Item{}, ErrVaultLocked
 	}
-	return a.vault.create(input)
+	return v.create(input)
 }
 
 // UpdateItem edits an existing item in the vault.
 func (a *App) UpdateItem(input Item) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
-	return a.vault.update(input)
+	return v.update(input)
 }
 
-// DeleteItem removes an item from the vault.
+// DeleteItem moves an item to the trash (soft delete).
 func (a *App) DeleteItem(id string) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
-	return a.vault.delete(id)
+	return v.trash(id)
 }
 
-// DeleteItems removes multiple items from the vault.
+// DeleteItems moves multiple items to the trash (soft delete).
 func (a *App) DeleteItems(ids []string) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
-	return a.vault.deleteItems(ids)
+	return v.trashItems(ids)
 }
+
+// ---------- Trash ----------
+
+// ListTrashed returns the items currently in the trash.
+func (a *App) ListTrashed() ([]Item, error) {
+	v := a.currentVault()
+	if v == nil {
+		return nil, ErrVaultLocked
+	}
+	return v.listTrashed(), nil
+}
+
+// RestoreTrashed brings a trashed item back to the active list.
+func (a *App) RestoreTrashed(id string) error {
+	v := a.currentVault()
+	if v == nil {
+		return ErrVaultLocked
+	}
+	return v.restoreTrashed(id)
+}
+
+// PurgeTrashed permanently removes the given items (and their versions/attachments).
+func (a *App) PurgeTrashed(ids []string) error {
+	v := a.currentVault()
+	if v == nil {
+		return ErrVaultLocked
+	}
+	return v.purgeItems(ids)
+}
+
+// SetTrashDays configures the trash retention in days.
+func (a *App) SetTrashDays(days int) error {
+	v := a.currentVault()
+	if v == nil {
+		return ErrVaultLocked
+	}
+	if days < 0 {
+		return errors.New("invalid retention")
+	}
+	return v.setSetting("trash_days", strconv.Itoa(days))
+}
+
+// ---------- Batch operations ----------
 
 // SetCategoryBatch sets the category of multiple items.
 func (a *App) SetCategoryBatch(ids []string, category string) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
-	return a.vault.setCategoryBatch(ids, category)
+	return v.setCategoryBatch(ids, category)
 }
 
 // AddTagBatch adds a tag to multiple items.
 func (a *App) AddTagBatch(ids []string, tag string) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
-	return a.vault.addTagBatch(ids, tag)
+	return v.addTagBatch(ids, tag)
 }
 
 // SetFavoriteBatch marks multiple items as favorite or not.
 func (a *App) SetFavoriteBatch(ids []string, favorite bool) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
-	return a.vault.setFavoriteBatch(ids, favorite)
+	return v.setFavoriteBatch(ids, favorite)
 }
 
 // ExportSelectedCSV returns selected items as CSV text.
 func (a *App) ExportSelectedCSV(ids []string) (string, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return "", ErrVaultLocked
 	}
-	return exportCSV(a.vault.itemsByIDs(ids)), nil
+	return exportCSV(v.itemsByIDs(ids)), nil
 }
 
 // ExportSelectedJSON returns selected items as JSON text.
 func (a *App) ExportSelectedJSON(ids []string) (string, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return "", ErrVaultLocked
 	}
-	return exportJSON(a.vault.itemsByIDs(ids))
+	return exportJSON(v.itemsByIDs(ids))
 }
+
+// ---------- Attachments ----------
+
+// AddAttachment stores an encrypted attachment (base64 data) on an item.
+func (a *App) AddAttachment(itemID, name, dataB64 string) (Attachment, error) {
+	v := a.currentVault()
+	if v == nil {
+		return Attachment{}, ErrVaultLocked
+	}
+	data, err := base64.StdEncoding.DecodeString(dataB64)
+	if err != nil {
+		return Attachment{}, errors.New("invalid file data")
+	}
+	return v.addAttachment(itemID, name, data)
+}
+
+// ListAttachments returns the metadata of an item's attachments.
+func (a *App) ListAttachments(itemID string) ([]Attachment, error) {
+	v := a.currentVault()
+	if v == nil {
+		return nil, ErrVaultLocked
+	}
+	return v.listAttachments(itemID)
+}
+
+// GetAttachment returns an attachment's name and base64 data.
+func (a *App) GetAttachment(id string) (AttachmentPayload, error) {
+	v := a.currentVault()
+	if v == nil {
+		return AttachmentPayload{}, ErrVaultLocked
+	}
+	_, name, data, err := v.getAttachment(id)
+	if err != nil {
+		return AttachmentPayload{}, err
+	}
+	return AttachmentPayload{Name: name, Data: base64.StdEncoding.EncodeToString(data)}, nil
+}
+
+// DeleteAttachment removes an attachment permanently.
+func (a *App) DeleteAttachment(id string) error {
+	v := a.currentVault()
+	if v == nil {
+		return ErrVaultLocked
+	}
+	return v.deleteAttachment(id)
+}
+
+// ---------- Backups ----------
+
+// BackupNow creates a consistent snapshot of the vault and returns its path.
+func (a *App) BackupNow() (string, error) {
+	a.vaultMu.RLock()
+	v := a.vault
+	file := a.vaultFile
+	a.vaultMu.RUnlock()
+	if v == nil || v.vaultKey == nil || !validVaultFile(file) {
+		return "", ErrVaultLocked
+	}
+	return a.backupVaultFile(v, file)
+}
+
+// autoBackup backs up only if no backup exists for today.
+func (a *App) autoBackup(v *Vault, file string) (string, error) {
+	backups := filepath.Join(a.VaultDir(), "backups")
+	base := strings.TrimSuffix(file, ".passapp")
+	today := time.Now().Format("20060102")
+	entries, err := os.ReadDir(backups)
+	if err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if strings.HasPrefix(name, base+"-"+today) && strings.HasSuffix(name, ".passapp") {
+				return "", nil // already backed up today
+			}
+		}
+	}
+	return a.backupVaultFile(v, file)
+}
+
+func (a *App) backupVaultFile(v *Vault, file string) (string, error) {
+	backups := filepath.Join(a.VaultDir(), "backups")
+	if err := os.MkdirAll(backups, 0o700); err != nil {
+		return "", err
+	}
+	base := strings.TrimSuffix(file, ".passapp")
+	dest := filepath.Join(backups, fmt.Sprintf("%s-%s.passapp", base, time.Now().Format("20060102-150405")))
+	if err := v.backupTo(dest); err != nil {
+		return "", err
+	}
+	a.pruneBackups(backups, base)
+	return dest, nil
+}
+
+func (a *App) pruneBackups(dir, base string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	var files []string
+	prefix := base + "-"
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() && strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".passapp") {
+			files = append(files, name)
+		}
+	}
+	sort.Strings(files)
+	for len(files) > maxBackupsPerVault {
+		_ = os.Remove(filepath.Join(dir, files[0]))
+		files = files[1:]
+	}
+}
+
+// ---------- Generator ----------
 
 // GeneratePassword creates a random password according to the given options.
 func (a *App) GeneratePassword(opts PasswordOptions) (string, error) {
@@ -270,11 +473,11 @@ func (a *App) CopyToClipboard(text string) error {
 	if err := clipboard.WriteAll(text); err != nil {
 		return err
 	}
-	a.scheduleClipboardClear()
+	a.scheduleClipboardClear(text)
 	return nil
 }
 
-func (a *App) scheduleClipboardClear() {
+func (a *App) scheduleClipboardClear(text string) {
 	a.clipMu.Lock()
 	defer a.clipMu.Unlock()
 	if a.clipStop != nil {
@@ -287,7 +490,10 @@ func (a *App) scheduleClipboardClear() {
 		defer t.Stop()
 		select {
 		case <-t.C:
-			_ = clipboard.WriteAll("")
+			// only clear if the user hasn't copied something else meanwhile
+			if cur, err := clipboard.ReadAll(); err == nil && cur == text {
+				_ = clipboard.WriteAll("")
+			}
 		case <-stop:
 		}
 	}()
@@ -297,34 +503,37 @@ func (a *App) scheduleClipboardClear() {
 
 // GetItemVersions returns the change history of an item, newest first.
 func (a *App) GetItemVersions(itemID string) ([]VersionEntry, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return nil, ErrVaultLocked
 	}
-	return a.vault.getVersions(itemID)
+	return v.getVersions(itemID)
 }
 
 // RestoreVersion restores an item to a previous version and returns it.
 func (a *App) RestoreVersion(versionID string) (Item, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return Item{}, ErrVaultLocked
 	}
-	return a.vault.restoreVersion(versionID)
+	return v.restoreVersion(versionID)
 }
 
 // ---------- Settings ----------
 
 // GetSettings returns vault settings relevant to the UI.
 func (a *App) GetSettings() (map[string]string, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return nil, ErrVaultLocked
 	}
 	out := map[string]string{}
-	for _, key := range []string{"autolock_minutes", "default_type"} {
-		v, err := a.vault.getSetting(key)
+	for _, key := range []string{"autolock_minutes", "default_type", "trash_days"} {
+		val, err := v.getSetting(key)
 		if err != nil {
 			return nil, err
 		}
-		out[key] = v
+		out[key] = val
 	}
 	if out["autolock_minutes"] == "" {
 		out["autolock_minutes"] = "5"
@@ -332,23 +541,28 @@ func (a *App) GetSettings() (map[string]string, error) {
 	if out["default_type"] == "" {
 		out["default_type"] = TypeLogin
 	}
+	if out["trash_days"] == "" {
+		out["trash_days"] = strconv.Itoa(defaultTrashDays)
+	}
 	return out, nil
 }
 
 // SetSetting persists a vault setting.
 func (a *App) SetSetting(key, value string) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
-	return a.vault.setSetting(key, value)
+	return v.setSetting(key, value)
 }
 
 // SetAutolockMinutes configures the auto-lock timeout (0 = never).
 func (a *App) SetAutolockMinutes(minutes int) error {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ErrVaultLocked
 	}
-	return a.vault.setSetting("autolock_minutes", strconv.Itoa(minutes))
+	return v.setSetting("autolock_minutes", strconv.Itoa(minutes))
 }
 
 // ---------- Favicons ----------
@@ -360,10 +574,11 @@ func (a *App) PrefetchFavicons() {
 }
 
 func (a *App) prefetchFavicons() {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return
 	}
-	for _, it := range a.vault.list() {
+	for _, it := range v.list() {
 		if it.Type != TypeLogin || it.URL == "" {
 			continue
 		}
@@ -371,7 +586,7 @@ func (a *App) prefetchFavicons() {
 		if domain == "" {
 			continue
 		}
-		if data, ok := a.vault.getFaviconCached(domain); ok {
+		if data, ok := v.getFaviconCached(domain); ok {
 			runtime.EventsEmit(a.ctx, "favicon", map[string]string{domain: data})
 			continue
 		}
@@ -390,7 +605,7 @@ func (a *App) prefetchFavicons() {
 		if err != nil || data == "" {
 			continue
 		}
-		a.vault.setFaviconCache(domain, data)
+		v.setFaviconCache(domain, data)
 		runtime.EventsEmit(a.ctx, "favicon", map[string]string{domain: data})
 	}
 }
@@ -410,7 +625,7 @@ func (a *App) ImportCSV(data string, mapping []FieldMapping) (ImportResult, erro
 }
 
 // ImportAutoCSV imports a CSV whose headers are auto-detected
-// (LastPass, 1Password and Bitwarden CSV exports).
+// (Chrome, Firefox, LastPass, 1Password and Bitwarden CSV exports).
 func (a *App) ImportAutoCSV(data string) (ImportResult, error) {
 	if !a.IsUnlocked() {
 		return ImportResult{}, ErrVaultLocked
@@ -434,7 +649,23 @@ func (a *App) ImportBitwardenJSON(data string) (ImportResult, error) {
 	return ImportResult{Preview: items}, nil
 }
 
-// ImportEncryptedTransfer imports items from a LockSync transfer file.
+// ImportKeePassDB imports a KeePass .kdbx database (v3/v4) given its password.
+func (a *App) ImportKeePassDB(dataB64, password string) (ImportResult, error) {
+	if !a.IsUnlocked() {
+		return ImportResult{}, ErrVaultLocked
+	}
+	raw, err := base64.StdEncoding.DecodeString(dataB64)
+	if err != nil {
+		return ImportResult{}, errors.New("invalid file data")
+	}
+	items, err := parseKeePassDB(raw, password)
+	if err != nil {
+		return ImportResult{}, err
+	}
+	return ImportResult{Preview: items}, nil
+}
+
+// ImportEncryptedTransfer imports items from a CipherSync transfer file.
 func (a *App) ImportEncryptedTransfer(data, password string) (ImportResult, error) {
 	if !a.IsUnlocked() {
 		return ImportResult{}, ErrVaultLocked
@@ -448,46 +679,51 @@ func (a *App) ImportEncryptedTransfer(data, password string) (ImportResult, erro
 
 // ImportCommit persists a set of items from an import preview.
 func (a *App) ImportCommit(items []Item) (ImportResult, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return ImportResult{}, ErrVaultLocked
 	}
-	return a.vault.importItems(items), nil
+	return v.importItems(items), nil
 }
 
 // ---------- Export ----------
 
 // ExportCSV returns all items as CSV text.
 func (a *App) ExportCSV() (string, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return "", ErrVaultLocked
 	}
-	return exportCSV(a.vault.list()), nil
+	return exportCSV(v.list()), nil
 }
 
 // ExportJSON returns all items as JSON text.
 func (a *App) ExportJSON() (string, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return "", ErrVaultLocked
 	}
-	return exportJSON(a.vault.list())
+	return exportJSON(v.list())
 }
 
-// ExportEncryptedJSON seals all items into a LockSync transfer string.
+// ExportEncryptedJSON seals all items into a CipherSync transfer string.
 func (a *App) ExportEncryptedJSON(password string) (string, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return "", ErrVaultLocked
 	}
-	return sealTransfer(a.vault.list(), password)
+	return sealTransfer(v.list(), password)
 }
 
 // ---------- TOTP / 2FA ----------
 
 // GenerateTOTPSetup creates a fresh TOTP secret + QR code for an item.
 func (a *App) GenerateTOTPSetup(itemID string) (TOTPSetupInfo, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return TOTPSetupInfo{}, ErrVaultLocked
 	}
-	item, err := a.vault.getItem(itemID)
+	item, err := v.getItem(itemID)
 	if err != nil {
 		return TOTPSetupInfo{}, err
 	}
@@ -505,10 +741,11 @@ func (a *App) GenerateTOTPSetup(itemID string) (TOTPSetupInfo, error) {
 
 // GetTOTPCode returns the current code for an item's stored secret.
 func (a *App) GetTOTPCode(itemID string) (TOTPCode, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return TOTPCode{}, ErrVaultLocked
 	}
-	item, err := a.vault.getItem(itemID)
+	item, err := v.getItem(itemID)
 	if err != nil {
 		return TOTPCode{}, err
 	}
@@ -548,8 +785,9 @@ func (a *App) IngestTOTPURI(uri string) (string, error) {
 
 // AnalyzeVault returns the password health report for the current vault.
 func (a *App) AnalyzeVault() (HealthReport, error) {
-	if !a.IsUnlocked() {
+	v := a.currentVault()
+	if v == nil {
 		return HealthReport{}, ErrVaultLocked
 	}
-	return analyzeVault(a.vault.list()), nil
+	return analyzeVault(v.list()), nil
 }

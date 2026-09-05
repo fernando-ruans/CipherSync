@@ -59,6 +59,8 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
     const autolockMinutes = useApp((s) => s.autolockMinutes)
     const setAutolockMinutes = useApp((s) => s.setAutolockMinutes)
     const deleteAccount = useApp((s) => s.deleteAccount)
+    const trashDays = useApp((s) => s.trashDays)
+    const setTrashDays = useApp((s) => s.setTrashDays)
     const [changePw, setChangePw] = useState(false)
     const [oldPassword, setOldPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
@@ -67,6 +69,7 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
     const [confirmingDelete, setConfirmingDelete] = useState(false)
     const [confirmText, setConfirmText] = useState('')
     const [deleting, setDeleting] = useState(false)
+    const [backingUp, setBackingUp] = useState(false)
 
     async function doDeleteAccount() {
         setDeleting(true)
@@ -76,6 +79,18 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
         } catch (err) {
             toast.error(await errorMessage(err))
             setDeleting(false)
+        }
+    }
+
+    async function doBackup() {
+        setBackingUp(true)
+        try {
+            const dest = await api.backupNow()
+            toast.success(`Backup salvo em ${dest.split(/[\\/]/).pop()}`)
+        } catch (err) {
+            toast.error(await errorMessage(err))
+        } finally {
+            setBackingUp(false)
         }
     }
 
@@ -138,6 +153,28 @@ export function SettingsModal({onClose}: {onClose: () => void}) {
                             </div>
                         </div>
                     )}
+                </Section>
+
+                <Section title="Backups">
+                    <p className="mb-2 text-xs text-faint">
+                        Backup diário automático ao desbloquear. Arquivos em <span className="font-mono">backups/</span> dentro da pasta de cofres (mantidos os 10 mais recentes).
+                    </p>
+                    <Button variant="subtle" className="w-full" onClick={() => void doBackup()} disabled={backingUp}>
+                        {backingUp ? 'Salvando...' : 'Fazer backup agora'}
+                    </Button>
+
+                    <label className="mb-1.5 mt-3 block text-xs font-medium text-mut">Manter itens na lixeira</label>
+                    <select
+                        value={trashDays}
+                        onChange={(e) => void setTrashDays(Number(e.target.value)).catch(async (err) => toast.error(await errorMessage(err)))}
+                        className="w-full rounded-lg border border-edge bg-input px-3 py-2 text-sm text-ink outline-none"
+                    >
+                        {[7, 14, 30, 60, 90].map((d) => (
+                            <option key={d} value={d}>
+                                {d} dias
+                            </option>
+                        ))}
+                    </select>
                 </Section>
 
                 <Section title="Sobre">

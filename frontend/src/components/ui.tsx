@@ -1,7 +1,11 @@
 import {ReactNode} from 'react'
 import {Eye, EyeOff, X} from 'lucide-react'
-import {useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {scoreColor, scoreLabel, passwordScore} from '../lib/password'
+
+// Stack of mounted modal closers (topmost last). Only the topmost modal
+// handles Escape, so stacked modals close one at a time.
+const modalStack: Array<() => void> = []
 
 type Variant = 'primary' | 'ghost' | 'danger' | 'subtle'
 
@@ -171,6 +175,25 @@ export function Modal({
     children: ReactNode
     width?: string
 }) {
+    const closeRef = useRef<() => void>(onClose)
+    closeRef.current = onClose
+    useEffect(() => {
+        // topmost-stack: only the last mounted modal responds to Escape
+        const entry = () => closeRef.current()
+        modalStack.push(entry)
+        function onKey(e: KeyboardEvent) {
+            if (e.key === 'Escape' && modalStack[modalStack.length - 1] === entry) {
+                e.stopPropagation()
+                entry()
+            }
+        }
+        window.addEventListener('keydown', onKey, true)
+        return () => {
+            const i = modalStack.indexOf(entry)
+            if (i >= 0) modalStack.splice(i, 1)
+            window.removeEventListener('keydown', onKey, true)
+        }
+    }, [])
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm">
             <div className={`w-full ${width} rounded-2xl border border-edge bg-surface shadow-2xl`}>

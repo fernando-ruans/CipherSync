@@ -29,13 +29,21 @@ func extractDomain(rawURL string) string {
 	return u.Hostname()
 }
 
+const faviconTTLSeconds = 30 * 24 * 60 * 60 // 30 days
+
 func (v *Vault) getFaviconCached(domain string) (string, bool) {
 	if v.db == nil {
 		return "", false
 	}
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 	var data string
-	err := v.db.QueryRow(`SELECT data FROM favicons WHERE domain = ?`, domain).Scan(&data)
+	var fetchedAt int64
+	err := v.db.QueryRow(`SELECT data, fetched_at FROM favicons WHERE domain = ?`, domain).Scan(&data, &fetchedAt)
 	if err != nil || data == "" {
+		return "", false
+	}
+	if time.Now().Unix()-fetchedAt > faviconTTLSeconds {
 		return "", false
 	}
 	return data, true
@@ -45,6 +53,8 @@ func (v *Vault) setFaviconCache(domain, data string) {
 	if v.db == nil {
 		return
 	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	_, _ = v.db.Exec(`INSERT INTO favicons (domain, data, fetched_at) VALUES (?, ?, ?)
 		ON CONFLICT(domain) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
 		domain, data, time.Now().Unix())
@@ -67,7 +77,7 @@ func httpGetWithTimeout(u string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", errNotFound
 	}

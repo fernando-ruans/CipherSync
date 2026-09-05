@@ -18,11 +18,11 @@ export function ExportModal({onClose}: {onClose: () => void}) {
         try {
             if (format === 'csv') {
                 const content = await api.exportCSV()
-                downloadFile('locksync-export.csv', content, 'text/csv')
+                downloadFile('ciphersync-export.csv', content, 'text/csv')
                 toast.success('Exportado como CSV')
             } else if (format === 'json') {
                 const content = await api.exportJSON()
-                downloadFile('locksync-export.json', content, 'application/json')
+                downloadFile('ciphersync-export.json', content, 'application/json')
                 toast.success('Exportado como JSON')
             } else {
                 if (transferPw.length < 8) {
@@ -34,7 +34,7 @@ export function ExportModal({onClose}: {onClose: () => void}) {
                     return
                 }
                 const content = await api.exportEncryptedJSON(transferPw)
-                downloadFile('locksync-transfer.passapp', content, 'text/plain')
+                downloadFile('ciphersync-transfer.passapp', content, 'text/plain')
                 toast.success('Transferência criptografada gerada')
             }
             onClose()

@@ -2,6 +2,7 @@ import {useEffect, useState} from 'react'
 import toast from 'react-hot-toast'
 import {Copy, Dices, RefreshCw} from 'lucide-react'
 import {api, errorMessage} from '../lib/api'
+import {safeCopy} from '../lib/util'
 import {Button, IconButton, Modal} from './ui'
 import type {PasswordOptions} from '../lib/types'
 
@@ -14,15 +15,26 @@ const defaultOpts: PasswordOptions = {
     excludeAmbiguous: false,
 }
 
+const pinOpts: PasswordOptions = {
+    length: 4,
+    useUpper: false,
+    useLower: false,
+    useDigits: true,
+    useSymbols: false,
+    excludeAmbiguous: true,
+}
+
 export function GeneratorModal({
     onClose,
     onUse,
+    preset = 'password',
 }: {
     onClose: () => void
     onUse: (value: string) => void
+    preset?: 'password' | 'pin'
 }) {
     const [tab, setTab] = useState<'char' | 'words'>('char')
-    const [opts, setOpts] = useState<PasswordOptions>(defaultOpts)
+    const [opts, setOpts] = useState<PasswordOptions>(preset === 'pin' ? pinOpts : defaultOpts)
     const [words, setWords] = useState(4)
     const [value, setValue] = useState('')
     const [loading, setLoading] = useState(false)
@@ -44,9 +56,14 @@ export function GeneratorModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
+    useEffect(() => {
+        if (!value) return
+        void generate()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [opts.length, opts.useUpper, opts.useLower, opts.useDigits, opts.useSymbols, opts.excludeAmbiguous, words, tab])
+
     async function copy() {
-        await api.copy(value)
-        toast.success('Copiado!')
+        await safeCopy(value)
     }
 
     return (
@@ -67,6 +84,32 @@ export function GeneratorModal({
 
             {tab === 'char' ? (
                 <div className="space-y-4">
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setOpts({...pinOpts, length: 4})}
+                            title="PIN de 4 dígitos (só números)"
+                            className="flex-1 rounded-lg border border-edge bg-input px-3 py-2 text-xs font-medium text-mut hover:bg-hover hover:text-ink"
+                        >
+                            PIN (4 dígitos)
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOpts({...pinOpts, length: 6})}
+                            title="PIN de 6 dígitos (só números)"
+                            className="flex-1 rounded-lg border border-edge bg-input px-3 py-2 text-xs font-medium text-mut hover:bg-hover hover:text-ink"
+                        >
+                            PIN (6 dígitos)
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOpts(defaultOpts)}
+                            title="Senha completa aleatória"
+                            className="flex-1 rounded-lg border border-edge bg-input px-3 py-2 text-xs font-medium text-mut hover:bg-hover hover:text-ink"
+                        >
+                            Senha forte
+                        </button>
+                    </div>
                     <div>
                         <div className="mb-1.5 flex justify-between text-xs">
                             <span className="font-medium text-mut">Comprimento</span>

@@ -9,16 +9,37 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	gokeepasslib "github.com/tobischo/gokeepasslib/v3"
 )
 
-const transferMagic = "LKSYNC"
+const transferMagic = "LKCIPH"
 
 // ---------- Import ----------
 
+func detectDelimiter(data string) rune {
+	// detect ; (Excel BR) vs , by counting on the first non-empty line
+	for _, line := range strings.Split(data, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.Count(line, ";") > strings.Count(line, ",") {
+			return ';'
+		}
+		return ','
+	}
+	return ','
+}
+
 func parseCSVRows(data string) ([][]string, error) {
+	data = strings.TrimPrefix(data, string(rune(0xFEFF)))
 	r := csv.NewReader(strings.NewReader(data))
 	r.FieldsPerRecord = -1
 	r.LazyQuotes = true
+	r.Comma = detectDelimiter(data)
 	return r.ReadAll()
 }
 
@@ -114,10 +135,10 @@ func buildItemsFromRows(rows [][]string, build func([]string) Item) []Item {
 	seen := map[string]bool{}
 	for _, row := range rows {
 		it := build(row)
-		if it.Title == "" && it.Username == "" && it.Password == "" && it.Notes == "" {
+		if it.Title == "" && it.Username == "" && it.Password == "" && it.Notes == "" && it.URL == "" {
 			continue
 		}
-		key := strings.ToLower(it.Title + "|" + it.Username)
+		key := strings.ToLower(it.Title + "|" + it.Username + "|" + it.Password)
 		if seen[key] {
 			continue
 		}
@@ -239,7 +260,7 @@ func parseBitwardenJSON(data string) ([]Item, error) {
 			}
 		}
 
-		key := strings.ToLower(it.Title + "|" + it.Username)
+		key := strings.ToLower(it.Title + "|" + it.Username + "|" + it.Password)
 		if seen[key] {
 			continue
 		}
@@ -249,8 +270,56 @@ func parseBitwardenJSON(data string) ([]Item, error) {
 	return items, nil
 }
 
+func parseKeePassDB(raw []byte, password string) ([]Item, error) {
+	db := gokeepasslib.NewDatabase()
+	db.Credentials = gokeepasslib.NewPasswordCredentials(password)
+	if err := gokeepasslib.NewDecoder(bytes.NewReader(raw)).Decode(db); err != nil {
+		return nil, err
+	}
+	if db.Content == nil {
+		return nil, errors.New("invalid KeePass database")
+	}
+	items := []Item{}
+	seen := map[string]bool{}
+	var walk func(groups []gokeepasslib.Group)
+	walk = func(groups []gokeepasslib.Group) {
+		for _, g := range groups {
+			for _, e := range g.Entries {
+				it := Item{Type: TypeLogin, Category: g.Name}
+				it.Title = e.GetContent("Title")
+				it.Username = e.GetContent("UserName")
+				it.Password = e.GetPassword()
+				it.URL = e.GetContent("URL")
+				it.Notes = e.GetContent("Notes")
+				if it.Title == "" && it.Username == "" && it.Password == "" && it.URL == "" && it.Notes == "" {
+					continue
+				}
+				key := strings.ToLower(it.Title + "|" + it.Username + "|" + it.Password)
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				items = append(items, it)
+			}
+			walk(g.Groups)
+		}
+	}
+	walk(db.Content.Root.Groups)
+	return items, nil
+}
+
 func (v *Vault) importItems(items []Item) ImportResult {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	res := ImportResult{}
+	tx, err := v.db.Begin()
+	if err != nil {
+		res.Errors = append(res.Errors, err.Error())
+		return res
+	}
+	defer tx.Rollback()
+	now := time.Now().UnixMilli()
+	var pending []Item
 	for _, it := range items {
 		normalizeItem(&it)
 		if it.Type == "" {
@@ -260,17 +329,30 @@ func (v *Vault) importItems(items []Item) ImportResult {
 			res.Skipped++
 			continue
 		}
-		if _, err := v.create(it); err != nil {
+		it.ID = uuid.NewString()
+		it.CreatedAt = now
+		it.UpdatedAt = now
+		if err := v.persistItemTx(tx, it); err != nil {
 			res.Errors = append(res.Errors, it.Title+": "+err.Error())
 			continue
 		}
+		pending = append(pending, it)
 		res.Created++
 	}
+	if err := tx.Commit(); err != nil {
+		res.Errors = append(res.Errors, err.Error())
+		return res
+	}
+	v.items = append(v.items, pending...)
+	v.sortItems()
 	return res
 }
 
 func (v *Vault) findDuplicate(candidate Item) bool {
 	for _, ex := range v.items {
+		if ex.Deleted {
+			continue
+		}
 		if strings.EqualFold(ex.Title, candidate.Title) &&
 			strings.EqualFold(ex.Username, candidate.Username) {
 			return true
@@ -343,7 +425,11 @@ func openTransfer(data, password string) ([]Item, error) {
 	}
 	r := bytes.NewReader(raw)
 	magic := make([]byte, len(transferMagic))
-	if _, err := io.ReadFull(r, magic); err != nil || string(magic) != transferMagic {
+	if _, err := io.ReadFull(r, magic); err != nil {
+		return nil, errors.New("invalid transfer file")
+	}
+	// accept current and legacy (pre-rebrand) magic headers
+	if string(magic) != transferMagic && string(magic) != "LKSYNC" {
 		return nil, errors.New("invalid transfer file")
 	}
 	ver, err := r.ReadByte()

@@ -13,12 +13,27 @@ func TestBatchDelete(t *testing.T) {
 	b, _ := v.create(Item{Title: "B"})
 	c, _ := v.create(Item{Title: "C"})
 
-	if err := v.deleteItems([]string{a.ID, c.ID}); err != nil {
+	if err := v.trashItems([]string{a.ID, c.ID}); err != nil {
 		t.Fatal(err)
 	}
 	items := v.list()
 	if len(items) != 1 || items[0].ID != b.ID {
-		t.Fatalf("expected only B to remain, got %+v", items)
+		t.Fatalf("expected only B active, got %+v", items)
+	}
+	trashed := v.listTrashed()
+	if len(trashed) != 2 {
+		t.Fatalf("expected 2 trashed, got %+v", trashed)
+	}
+
+	// restore one, purge the other
+	if err := v.restoreTrashed(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.purgeItems([]string{c.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.list()) != 2 || len(v.listTrashed()) != 0 {
+		t.Fatalf("restore/purge failed: active=%d trash=%d", len(v.list()), len(v.listTrashed()))
 	}
 }
 

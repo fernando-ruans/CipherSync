@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/trustelem/zxcvbn"
 )
 
 type ItemRef struct {
@@ -62,6 +64,8 @@ func goPasswordScore(pw string) int {
 	if commonWeakPasswords[strings.ToLower(pw)] {
 		return 0
 	}
+	// zxcvbn: real pattern/dictionary analysis (0-4)
+	zx := zxcvbn.PasswordStrength(pw, nil).Score
 	score := 0
 	if len(pw) >= 8 {
 		score++
@@ -81,6 +85,10 @@ func goPasswordScore(pw string) int {
 	if variety == 4 && len(pw) >= 12 {
 		score++
 	}
+	// zxcvbn catches dictionary/leaked patterns the heuristic misses
+	if zx < score {
+		score = zx
+	}
 	if score > 4 {
 		score = 4
 	}
@@ -93,6 +101,8 @@ var breachCache = struct {
 	sync.Mutex
 	results map[string]int
 }{results: map[string]int{}}
+
+const maxBreachCache = 2000
 
 // checkBreach queries the Have I Been Pwned range API. Only the first 5
 // characters of the password's SHA-1 hash leave the machine.
@@ -136,14 +146,20 @@ func checkBreach(password string) (breached bool, count int, err error) {
 
 	breachCache.Lock()
 	breachCache.results[full] = count
+	if len(breachCache.results) > maxBreachCache {
+		breachCache.results = map[string]int{}
+	}
 	breachCache.Unlock()
 	return count > 0, count, nil
 }
 
-func checkBreachesConcurrent(passwords []string, maxWorkers int) map[string]int {
+func checkBreachesConcurrent(passwords []string, maxWorkers int) (map[string]int, bool) {
 	results := map[string]int{}
+	if maxWorkers < 1 {
+		maxWorkers = 1
+	}
 	if len(passwords) == 0 {
-		return results
+		return results, false
 	}
 	uniq := map[string]bool{}
 	for _, p := range passwords {
@@ -152,12 +168,13 @@ func checkBreachesConcurrent(passwords []string, maxWorkers int) map[string]int 
 		}
 	}
 	if len(uniq) == 0 {
-		return results
+		return results, false
 	}
 
 	sem := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+	hadError := false
 	for pw := range uniq {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -166,6 +183,9 @@ func checkBreachesConcurrent(passwords []string, maxWorkers int) map[string]int 
 			defer func() { <-sem }()
 			_, count, err := checkBreach(p)
 			if err != nil {
+				mu.Lock()
+				hadError = true
+				mu.Unlock()
 				return
 			}
 			mu.Lock()
@@ -174,7 +194,7 @@ func checkBreachesConcurrent(passwords []string, maxWorkers int) map[string]int 
 		}(pw)
 	}
 	wg.Wait()
-	return results
+	return results, hadError
 }
 
 // breachChecker is a hook so tests can avoid real network calls.
@@ -199,6 +219,9 @@ func analyzeVault(items []Item) HealthReport {
 	distinctPasswords := []string{}
 
 	for _, it := range items {
+		if it.Deleted {
+			continue
+		}
 		if it.Type != TypeLogin {
 			continue
 		}
@@ -245,7 +268,8 @@ func analyzeVault(items []Item) HealthReport {
 	})
 
 	// HIBP
-	breachResults := breachChecker(distinctPasswords, 4)
+	breachResults, breachErr := breachChecker(distinctPasswords, 4)
+	report.BreachCheckError = breachErr
 	for pw, refs := range byPassword {
 		if count, ok := breachResults[pw]; ok && count > 0 {
 			report.BreachedCount += len(refs)

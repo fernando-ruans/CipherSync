@@ -8,20 +8,34 @@ const (
 )
 
 type Item struct {
-	ID        string            `json:"id"`
-	Type      string            `json:"type"`
-	Title     string            `json:"title"`
-	Username  string            `json:"username"`
-	Password  string            `json:"password"`
-	URL       string            `json:"url"`
-	Notes     string            `json:"notes"`
-	Category  string            `json:"category"`
-	Tags      []string          `json:"tags"`
-	Fields    map[string]string `json:"fields"`
-	TotpSecret string           `json:"totpSecret"`
-	Favorite  bool              `json:"favorite"`
-	CreatedAt int64             `json:"createdAt"`
-	UpdatedAt int64             `json:"updatedAt"`
+	ID         string            `json:"id"`
+	Type       string            `json:"type"`
+	Title      string            `json:"title"`
+	Username   string            `json:"username"`
+	Password   string            `json:"password"`
+	URL        string            `json:"url"`
+	Notes      string            `json:"notes"`
+	Category   string            `json:"category"`
+	Tags       []string          `json:"tags"`
+	Fields     map[string]string `json:"fields"`
+	TotpSecret string            `json:"totpSecret"`
+	Favorite   bool              `json:"favorite"`
+	Deleted    bool              `json:"deleted"`
+	DeletedAt  int64             `json:"deletedAt"`
+	CreatedAt  int64             `json:"createdAt"`
+	UpdatedAt  int64             `json:"updatedAt"`
+}
+
+type Attachment struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Size    int64  `json:"size"`
+	AddedAt int64  `json:"addedAt"`
+}
+
+type AttachmentPayload struct {
+	Name string `json:"name"`
+	Data string `json:"data"`
 }
 
 type PasswordOptions struct {

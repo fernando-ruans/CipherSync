@@ -11,12 +11,14 @@ import {
     LogOut,
     Minus,
     Plus,
+    RotateCcw,
     Search,
     Settings,
     Shield,
     Star,
     Tag as TagIcon,
     Trash2,
+    Undo2,
     Upload,
     X,
 } from 'lucide-react'
@@ -29,7 +31,8 @@ import {SettingsModal} from './SettingsModal'
 import {ImportModal} from './ImportModal'
 import {ExportModal} from './ExportModal'
 import {WatchtowerModal} from './WatchtowerModal'
-import {extractDomain, downloadFile} from '../lib/util'
+import {useTOTPCode} from './TOTPDisplay'
+import {extractDomain, downloadFile, safeCopy} from '../lib/util'
 import type {Item} from '../lib/types'
 import {EventsOn} from '../../wailsjs/runtime/runtime'
 import logo from '../assets/ciphersync-logo-64.png'
@@ -62,6 +65,10 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
     const toggleFavoritesOnly = useApp((s) => s.toggleFavoritesOnly)
     const lock = useApp((s) => s.lock)
     const vaultName = useApp((s) => s.vaultName)
+    const trashView = useApp((s) => s.trashView)
+    const setTrashView = useApp((s) => s.setTrashView)
+    const trash = useApp((s) => s.trash)
+    const loadTrash = useApp((s) => s.loadTrash)
 
     const categories = useMemo(() => {
         const map = new Map<string, number>()
@@ -87,7 +94,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
             key: 'all',
             label: 'Todos os itens',
             icon: <Layers size={16}/>,
-            active: !favoritesOnly && category === 'all' && tag === '',
+            active: !favoritesOnly && !trashView && category === 'all' && tag === '',
             count: items.length,
             onClick: () => setCategory('all'),
         },
@@ -95,7 +102,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
             key: 'fav',
             label: 'Favoritos',
             icon: <Star size={16}/>,
-            active: favoritesOnly,
+            active: favoritesOnly && !trashView,
             count: items.filter((i) => i.favorite).length,
             onClick: () => toggleFavoritesOnly(),
         },
@@ -106,6 +113,17 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
             active: false,
             count: null,
             onClick: onOpenWatchtower,
+        },
+        {
+            key: 'trash',
+            label: 'Lixeira',
+            icon: <Trash2 size={16}/>,
+            active: trashView,
+            count: trash.length,
+            onClick: () => {
+                void loadTrash().catch(() => undefined)
+                setTrashView(true)
+            },
         },
     ]
 
@@ -155,7 +173,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
                         key={name}
                         onClick={() => setCategory(name)}
                         className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
-                            !favoritesOnly && category === name && tag === ''
+                            !favoritesOnly && !trashView && category === name && tag === ''
                                 ? 'bg-accent/15 text-accent'
                                 : 'text-mut hover:bg-hover hover:text-ink'
                         }`}
@@ -177,7 +195,7 @@ function Sidebar({onOpenSettings, onOpenImport, onOpenExport, onOpenWatchtower}:
                                 key={name}
                                 onClick={() => setTag(name)}
                                 className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
-                                    !favoritesOnly && tag === name
+                                    !favoritesOnly && !trashView && tag === name
                                         ? 'bg-accent/15 text-accent'
                                         : 'text-mut hover:bg-hover hover:text-ink'
                                 }`}
@@ -242,7 +260,7 @@ function BatchBar({count}: {count: number}) {
         try {
             const content = kind === 'csv' ? await api.exportSelectedCSV(ids) : await api.exportSelectedJSON(ids)
             downloadFile(
-                kind === 'csv' ? 'locksync-selecionados.csv' : 'locksync-selecionados.json',
+                kind === 'csv' ? 'ciphersync-selecionados.csv' : 'ciphersync-selecionados.json',
                 content,
                 kind === 'csv' ? 'text/csv' : 'application/json',
             )
@@ -269,10 +287,10 @@ function BatchBar({count}: {count: number}) {
             <div className="flex flex-wrap items-center gap-1.5">
                 <button
                     onClick={() => void deleteSelected()}
-                    title="Excluir selecionados (Ctrl+D)"
+                    title="Mover selecionados para a lixeira (Ctrl+D)"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20"
                 >
-                    <Trash2 size={13}/> Excluir
+                    <Trash2 size={13}/> Lixeira
                 </button>
                 <select
                     defaultValue=""
@@ -358,11 +376,13 @@ function ItemList() {
 
     useEffect(() => {
         function onKey(e: KeyboardEvent) {
+            const target = e.target as HTMLElement | null
+            const inField = !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
             const key = e.key.toLowerCase()
             if ((e.ctrlKey || e.metaKey) && key === 'f') {
                 e.preventDefault()
                 searchRef.current?.focus()
-            } else if ((e.ctrlKey || e.metaKey) && key === 'a') {
+            } else if ((e.ctrlKey || e.metaKey) && key === 'a' && !inField) {
                 e.preventDefault()
                 if (filtered.length > 0) setMulti(filtered.map((i) => i.id), true)
             } else if ((e.ctrlKey || e.metaKey) && key === 'd') {
@@ -478,6 +498,7 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
 }) {
     const domain = item.type === 'login' && item.url ? extractDomain(item.url) : ''
     const breached = useApp((s) => s.breachedIds.includes(item.id))
+    const {code: totp, remaining} = useTOTPCode(item.totpSecret || undefined)
     return (
         <div
             onClick={onRowClick}
@@ -504,6 +525,19 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
                         {item.title || 'Sem título'}
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
+                        {totp && (
+                            <button
+                                type="button"
+                                title={`Copiar código 2FA (${remaining}s)`}
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    void safeCopy(totp, 'Código 2FA copiado')
+                                }}
+                                className="font-mono text-xs font-semibold text-accent hover:underline"
+                            >
+                                {totp.slice(0, 3)} {totp.slice(3)}
+                            </button>
+                        )}
                         {breached && (
                             <span title="Senha vazada" className="text-red-400">
                                 <AlertTriangle size={13}/>
@@ -520,6 +554,162 @@ function ItemRow({item, selected, multiChecked, onCheckboxClick, onRowClick}: {
     )
 }
 
+function ListPane() {
+    const trashView = useApp((s) => s.trashView)
+    if (trashView) {
+        return <TrashView/>
+    }
+    return <ItemList/>
+}
+
+function TrashView() {
+    const trash = useApp((s) => s.trash)
+    const loadTrash = useApp((s) => s.loadTrash)
+    const restoreItem = useApp((s) => s.restoreItem)
+    const purgeSelected = useApp((s) => s.purgeSelected)
+    const emptyTrash = useApp((s) => s.emptyTrash)
+    const multiSelected = useApp((s) => s.multiSelected)
+    const toggleMulti = useApp((s) => s.toggleMulti)
+    const setMulti = useApp((s) => s.setMulti)
+    const clearMulti = useApp((s) => s.clearMulti)
+
+    useEffect(() => {
+        void loadTrash().catch(() => undefined)
+    }, [loadTrash])
+
+    async function doPurge() {
+        if (multiSelected.length === 0) return
+        if (!confirm(`Excluir permanentemente ${multiSelected.length} item(ns)? Não há como desfazer.`)) return
+        try {
+            await purgeSelected()
+            toast.success('Itens excluídos permanentemente')
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : String(err))
+        }
+    }
+
+    async function doEmpty() {
+        if (trash.length === 0) return
+        if (!confirm(`Esvaziar a lixeira? ${trash.length} item(ns) serão apagados para sempre.`)) return
+        try {
+            await emptyTrash()
+            toast.success('Lixeira esvaziada')
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : String(err))
+        }
+    }
+
+    async function doRestore(id: string) {
+        try {
+            await restoreItem(id)
+            toast.success('Item restaurado')
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : String(err))
+        }
+    }
+
+    const allSelected = trash.length > 0 && trash.every((i) => multiSelected.includes(i.id))
+
+    return (
+        <section className="flex w-80 shrink-0 flex-col border-r border-edge bg-panel2">
+            <div className="flex items-center justify-between border-b border-edge px-3 py-2.5">
+                <div>
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                        <Trash2 size={15} className="text-red-400"/> Lixeira
+                    </div>
+                    <div className="mt-0.5 text-xs text-faint">{trash.length} item(ns)</div>
+                </div>
+                <button
+                    onClick={() => void doEmpty()}
+                    disabled={trash.length === 0}
+                    className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40"
+                >
+                    Esvaziar
+                </button>
+            </div>
+
+            {multiSelected.length > 0 && (
+                <div className="flex items-center gap-1.5 border-b border-edge bg-surface px-3 py-2">
+                    <span className="mr-1 text-xs font-semibold text-accent">{multiSelected.length}</span>
+                    <button
+                        onClick={() => {
+                            const ids = [...multiSelected]
+                            clearMulti()
+                            void (async () => {
+                                for (const id of ids) {
+                                    await restoreItem(id).catch(() => undefined)
+                                }
+                            })()
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-edge bg-input px-2.5 py-1.5 text-xs font-medium text-soft hover:bg-hover hover:text-ink"
+                    >
+                        <Undo2 size={13}/> Restaurar
+                    </button>
+                    <button
+                        onClick={() => void doPurge()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/20"
+                    >
+                        <Trash2 size={13}/> Excluir p/ sempre
+                    </button>
+                </div>
+            )}
+
+            <div className="flex items-center justify-between border-b border-edge px-3 py-1.5">
+                <button
+                    onClick={() => (allSelected ? clearMulti() : setMulti(trash.map((i) => i.id), true))}
+                    disabled={trash.length === 0}
+                    className="flex items-center gap-2 text-xs font-medium text-mut transition-colors hover:text-ink disabled:opacity-40"
+                >
+                    <span className="flex h-4 w-4 items-center justify-center rounded border border-edge bg-input">
+                        {allSelected ? <Check size={12}/> : null}
+                    </span>
+                    Selecionar todos
+                </button>
+            </div>
+
+            <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+                {trash.length === 0 ? (
+                    <div className="px-3 py-8 text-center text-sm text-faint">Lixeira vazia.</div>
+                ) : (
+                    trash.map((item) => (
+                        <div
+                            key={item.id}
+                            className="group flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 hover:bg-hover"
+                        >
+                            <button
+                                type="button"
+                                onClick={() => toggleMulti(item.id)}
+                                title="Selecionar"
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                                    multiSelected.includes(item.id)
+                                        ? 'border-accent bg-accent text-white'
+                                        : 'border-edge bg-input text-faint opacity-40 group-hover:opacity-100'
+                                }`}
+                            >
+                                {multiSelected.includes(item.id) ? <Check size={13}/> : null}
+                            </button>
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-medium text-soft">{item.title || 'Sem título'}</div>
+                                <div className="mt-0.5 text-xs text-faint">
+                                    Excluído em {item.deletedAt ? new Date(item.deletedAt).toLocaleDateString('pt-BR') : '—'}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                title="Restaurar"
+                                onClick={() => void doRestore(item.id)}
+                                className="rounded-lg p-1.5 text-mut opacity-0 transition-all hover:bg-hover hover:text-emerald-400 group-hover:opacity-100"
+                            >
+                                <RotateCcw size={14}/>
+                            </button>
+                        </div>
+                    ))
+                )}
+            </div>
+        </section>
+    )
+}
+
 function TopBar({onNew}: {onNew: () => void}) {
     const [showGenerator, setShowGenerator] = useState(false)
     const createItem = useApp((s) => s.createItem)
@@ -529,11 +719,22 @@ function TopBar({onNew}: {onNew: () => void}) {
         void createItem({password: value, title: 'Novo item'})
     }
 
+    useEffect(() => {
+        function onKey(e: KeyboardEvent) {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') {
+                e.preventDefault()
+                setShowGenerator(true)
+            }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [])
+
     return (
         <header className="flex items-center justify-between border-b border-edge px-6 py-3">
             <h1 className="text-sm font-semibold text-soft">Cofre de senhas</h1>
             <div className="flex items-center gap-2">
-                <Button variant="subtle" onClick={() => setShowGenerator(true)}>
+                <Button variant="subtle" onClick={() => setShowGenerator(true)} title="Gerar senha (Ctrl+G)">
                     <Dices size={16}/> Gerar senha
                 </Button>
                 <Button onClick={onNew}>
@@ -583,7 +784,7 @@ export function MainScreen() {
                 const state = useApp.getState()
                 const sel = state.items.find((i) => i.id === state.selectedId)
                 if (sel?.password) {
-                    void api.copy(sel.password).then(() => toast.success('Senha copiada'))
+                    void safeCopy(sel.password, 'Senha copiada')
                 }
             }
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
@@ -591,7 +792,7 @@ export function MainScreen() {
                 const state = useApp.getState()
                 const sel = state.items.find((i) => i.id === state.selectedId)
                 if (sel?.username) {
-                    void api.copy(sel.username).then(() => toast.success('Usuário copiado'))
+                    void safeCopy(sel.username, 'Usuário copiado')
                 }
             }
         }
@@ -609,7 +810,7 @@ export function MainScreen() {
                     onOpenExport={() => setShowExport(true)}
                     onOpenWatchtower={() => setShowWatchtower(true)}
                 />
-                <ItemList/>
+                <ListPane/>
                 <main className="min-w-0 flex-1">
                     <ItemDetail/>
                 </main>

@@ -2,6 +2,18 @@ import {create} from 'zustand'
 import {api} from './lib/api'
 import type {Item, ItemType, Phase, VaultInfo} from './lib/types'
 
+// Module-level dirty guard: ItemDetail registers which item has unsaved
+// edits so navigation actions can ask for confirmation first.
+let unsavedItemId: string | null = null
+
+export function setUnsavedItem(id: string | null) {
+    unsavedItemId = id
+}
+
+function confirmDiscard(): boolean {
+    return window.confirm('Você tem alterações não salvas. Descartar?')
+}
+
 interface AppState {
     phase: Phase
     vaults: VaultInfo[]
@@ -13,6 +25,9 @@ interface AppState {
     category: string
     tag: string
     favoritesOnly: boolean
+    trashView: boolean
+    trash: Item[]
+    trashDays: number
     favicons: Record<string, string>
     breachedIds: string[]
     autolockMinutes: number
@@ -30,6 +45,12 @@ interface AppState {
     setCategory: (c: string) => void
     setTag: (t: string) => void
     toggleFavoritesOnly: () => void
+    setTrashView: (v: boolean) => void
+    loadTrash: () => Promise<void>
+    restoreItem: (id: string) => Promise<void>
+    purgeSelected: () => Promise<void>
+    emptyTrash: () => Promise<void>
+    setTrashDays: (days: number) => Promise<void>
     selectItem: (id: string | null) => void
     setFavicon: (domain: string, dataUri: string) => void
     setBreachedIds: (ids: string[]) => void
@@ -59,6 +80,9 @@ export const useApp = create<AppState>((set, get) => ({
     category: 'all',
     tag: '',
     favoritesOnly: false,
+    trashView: false,
+    trash: [],
+    trashDays: 30,
     favicons: {},
     breachedIds: [],
     autolockMinutes: 5,
@@ -92,6 +116,7 @@ export const useApp = create<AppState>((set, get) => ({
     },
 
     lock: async () => {
+        unsavedItemId = null
         try {
             await api.lock()
         } finally {
@@ -105,6 +130,8 @@ export const useApp = create<AppState>((set, get) => ({
                 category: 'all',
                 tag: '',
                 favoritesOnly: false,
+                trashView: false,
+                trash: [],
                 favicons: {},
                 breachedIds: [],
             })
@@ -118,6 +145,7 @@ export const useApp = create<AppState>((set, get) => ({
     },
 
     deleteAccount: async () => {
+        unsavedItemId = null
         await api.deleteAccount()
         set({
             phase: 'setup',
@@ -130,6 +158,8 @@ export const useApp = create<AppState>((set, get) => ({
             category: 'all',
             tag: '',
             favoritesOnly: false,
+            trashView: false,
+            trash: [],
             favicons: {},
         })
     },
@@ -138,9 +168,11 @@ export const useApp = create<AppState>((set, get) => ({
         try {
             const s = await api.getSettings()
             const minutes = parseInt(s['autolock_minutes'] ?? '5', 10)
+            const trashDays = parseInt(s['trash_days'] ?? '30', 10)
             set({
                 autolockMinutes: isNaN(minutes) ? 5 : minutes,
                 defaultType: (s['default_type'] as ItemType) || 'login',
+                trashDays: isNaN(trashDays) ? 30 : trashDays,
             })
         } catch {
             // vault not unlocked yet; ignore
@@ -152,11 +184,55 @@ export const useApp = create<AppState>((set, get) => ({
         set({autolockMinutes: minutes})
     },
 
+    setTrashDays: async (days) => {
+        await api.setTrashDays(days)
+        set({trashDays: days})
+    },
+
     setSearch: (search) => set({search}),
-    setCategory: (category) => set({category, tag: '', favoritesOnly: false}),
-    setTag: (tag) => set({tag, category: 'all', favoritesOnly: false}),
-    toggleFavoritesOnly: () => set((s) => ({favoritesOnly: !s.favoritesOnly, category: 'all', tag: ''})),
-    selectItem: (selectedId) => set({selectedId}),
+    setCategory: (category) => set({category, tag: '', favoritesOnly: false, trashView: false}),
+    setTag: (tag) => set({tag, category: 'all', favoritesOnly: false, trashView: false}),
+    toggleFavoritesOnly: () => set((s) => ({favoritesOnly: !s.favoritesOnly, category: 'all', tag: '', trashView: false})),
+    setTrashView: (trashView) => {
+        if (trashView && unsavedItemId && !confirmDiscard()) {
+            return
+        }
+        unsavedItemId = null
+        if (trashView) {
+            set({trashView: true, category: 'all', tag: '', favoritesOnly: false, selectedId: null, multiSelected: []})
+        } else {
+            set({trashView: false, selectedId: null, multiSelected: []})
+        }
+    },
+    loadTrash: async () => {
+        const trash = await api.listTrashed()
+        set({trash})
+    },
+    restoreItem: async (id) => {
+        await api.restoreTrashed(id)
+        const [items, trash] = await Promise.all([api.getItems(), api.listTrashed()])
+        set({items, trash, selectedId: id})
+    },
+    purgeSelected: async () => {
+        const ids = [...get().multiSelected]
+        if (ids.length === 0) return
+        await api.purgeTrashed(ids)
+        const trash = await api.listTrashed()
+        set({trash, multiSelected: [], selectedId: null})
+    },
+    emptyTrash: async () => {
+        const ids = get().trash.map((i) => i.id)
+        if (ids.length === 0) return
+        await api.purgeTrashed(ids)
+        set({trash: [], multiSelected: [], selectedId: null})
+    },
+    selectItem: (selectedId) => {
+        const cur = get().selectedId
+        if (selectedId !== cur && unsavedItemId && unsavedItemId === cur) {
+            if (!confirmDiscard()) return
+        }
+        set({selectedId})
+    },
     setFavicon: (domain, dataUri) =>
         set((s) => ({favicons: {...s.favicons, [domain]: dataUri}})),
     setBreachedIds: (breachedIds) => set({breachedIds}),
@@ -176,6 +252,8 @@ export const useApp = create<AppState>((set, get) => ({
             fields: {},
             totpSecret: '',
             favorite: false,
+            deleted: false,
+            deletedAt: 0,
             createdAt: now,
             updatedAt: now,
         }
@@ -193,8 +271,10 @@ export const useApp = create<AppState>((set, get) => ({
 
     removeItem: async (id) => {
         await api.deleteItem(id)
+        const [items, trash] = await Promise.all([api.getItems(), api.listTrashed()])
         set({
-            items: get().items.filter((i) => i.id !== id),
+            items,
+            trash,
             selectedId: get().selectedId === id ? null : get().selectedId,
         })
     },
@@ -239,10 +319,12 @@ export const useApp = create<AppState>((set, get) => ({
         const ids = [...get().multiSelected]
         if (ids.length === 0) return
         await api.deleteItems(ids)
-        await get().refreshItems()
+        const [items, trash] = await Promise.all([api.getItems(), api.listTrashed()])
         set((s) => ({
+            items,
+            trash,
             multiSelected: [],
-            selectedId: s.selectedId && get().items.some((i) => i.id === s.selectedId) ? s.selectedId : null,
+            selectedId: s.selectedId && items.some((i) => i.id === s.selectedId) ? s.selectedId : null,
         }))
     },
 

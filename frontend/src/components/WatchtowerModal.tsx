@@ -155,7 +155,9 @@ export function WatchtowerModal({onClose, onSelectItem}: {
                             report.duplicateGroups.map((g, i) => (
                                 <div key={i} className="rounded-lg border border-edge bg-panel2 p-2">
                                     <div className="mb-1 flex items-center justify-between px-1 text-xs">
-                                        <span className="font-mono text-mut">{g.password}</span>
+                                        <span className="font-mono text-mut" title="Senha oculta por segurança">
+                                            {g.password.slice(0, 2)}{'•'.repeat(Math.max(4, Math.min(10, g.password.length - 2)))}
+                                        </span>
                                         <span className="text-faint">{g.items.length} itens</span>
                                     </div>
                                     {g.items.map((r) => (

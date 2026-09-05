@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,12 +20,16 @@ var (
 	ErrWrongPassword = errors.New("wrong master password")
 	ErrVaultLocked   = errors.New("vault is locked")
 	ErrItemNotFound  = errors.New("item not found")
-	ErrNotAVault     = errors.New("not a valid LockSync vault")
+	ErrNotAVault     = errors.New("not a valid CipherSync vault")
+	ErrTooLarge      = errors.New("file too large")
 )
 
 const metaSaltKey = "kdf_salt"
 const metaParamsKey = "kdf_params"
 const metaVaultKey = "encrypted_vault_key"
+
+const defaultTrashDays = 30
+const maxAttachmentBytes = 10 * 1024 * 1024
 
 func ensureTables(db *sql.DB) error {
 	queries := []string{
@@ -49,6 +55,15 @@ func ensureTables(db *sql.DB) error {
 			data TEXT NOT NULL,
 			fetched_at INTEGER NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS attachments (
+			id TEXT PRIMARY KEY,
+			item_id TEXT NOT NULL,
+			name TEXT NOT NULL,
+			encrypted BLOB NOT NULL,
+			size INTEGER NOT NULL,
+			added_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_attachments_item ON attachments(item_id)`,
 	}
 	for _, q := range queries {
 		if _, err := db.Exec(q); err != nil {
@@ -59,6 +74,7 @@ func ensureTables(db *sql.DB) error {
 }
 
 type Vault struct {
+	mu       sync.RWMutex
 	path     string
 	db       *sql.DB
 	vaultKey []byte
@@ -183,6 +199,11 @@ func openVault(path, password string) (*Vault, error) {
 			encVaultKey = v
 		}
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		db.Close()
+		return nil, err
+	}
 	rows.Close()
 	if salt == nil || encVaultKey == nil || paramsJSON == nil {
 		db.Close()
@@ -218,6 +239,14 @@ func openVault(path, password string) (*Vault, error) {
 		v.close()
 		return nil, err
 	}
+	// purge expired trash based on the vault's retention setting
+	trashDays := defaultTrashDays
+	if raw, err := v.getSetting("trash_days"); err == nil && raw != "" {
+		if d, err := parseIntDefault(raw, defaultTrashDays); err == nil {
+			trashDays = d
+		}
+	}
+	_ = v.purgeExpiredTrash(trashDays)
 	return v, nil
 }
 
@@ -243,13 +272,12 @@ func (v *Vault) loadItems() error {
 			return err
 		}
 		normalizeItem(&item)
-		itemCopy := item
-		v.items = append(v.items, itemCopy)
-		v.itemsBy[item.ID] = &v.items[len(v.items)-1]
+		v.items = append(v.items, item)
 	}
-	sort.Slice(v.items, func(i, j int) bool {
-		return v.items[i].Title < v.items[j].Title
-	})
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	v.sortItems()
 	return nil
 }
 
@@ -265,7 +293,25 @@ func normalizeItem(item *Item) {
 	}
 }
 
+// sortItems sorts the in-memory items and rebuilds the index map, keeping
+// itemsBy pointers consistent with the sorted slice.
+func (v *Vault) sortItems() {
+	sort.Slice(v.items, func(i, j int) bool {
+		return v.items[i].Title < v.items[j].Title
+	})
+	v.rebuildIndex()
+}
+
+func (v *Vault) rebuildIndex() {
+	v.itemsBy = make(map[string]*Item, len(v.items))
+	for i := range v.items {
+		v.itemsBy[v.items[i].ID] = &v.items[i]
+	}
+}
+
 func (v *Vault) close() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	if v.vaultKey != nil {
 		wipe(v.vaultKey)
 		v.vaultKey = nil
@@ -278,13 +324,38 @@ func (v *Vault) close() {
 	}
 }
 
+// list returns the active (non-trashed) items.
 func (v *Vault) list() []Item {
-	out := make([]Item, len(v.items))
-	copy(out, v.items)
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	out := []Item{}
+	for _, it := range v.items {
+		if !it.Deleted {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// listTrashed returns the soft-deleted items, oldest first.
+func (v *Vault) listTrashed() []Item {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	out := []Item{}
+	for _, it := range v.items {
+		if it.Deleted {
+			out = append(out, it)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].DeletedAt < out[j].DeletedAt
+	})
 	return out
 }
 
 func (v *Vault) getItem(id string) (Item, error) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 	it, ok := v.itemsBy[id]
 	if !ok {
 		return Item{}, ErrItemNotFound
@@ -293,6 +364,8 @@ func (v *Vault) getItem(id string) (Item, error) {
 }
 
 func (v *Vault) create(input Item) (Item, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	normalizeItem(&input)
 	if input.Type == "" {
 		input.Type = TypeLogin
@@ -305,21 +378,31 @@ func (v *Vault) create(input Item) (Item, error) {
 		return Item{}, err
 	}
 	v.items = append(v.items, input)
-	v.itemsBy[input.ID] = &v.items[len(v.items)-1]
-	sort.Slice(v.items, func(i, j int) bool {
-		return v.items[i].Title < v.items[j].Title
-	})
+	v.sortItems()
 	return input, nil
 }
 
 func (v *Vault) update(input Item) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	existing, ok := v.itemsBy[input.ID]
 	if !ok {
 		return ErrItemNotFound
 	}
 	normalizeItem(&input)
-	if err := v.addVersion(*existing); err != nil {
-		return err
+	// skip version snapshot when only the favorite flag changed
+	onlyFavorite := existing.Favorite != input.Favorite &&
+		existing.Title == input.Title &&
+		existing.Username == input.Username &&
+		existing.Password == input.Password &&
+		existing.URL == input.URL &&
+		existing.Notes == input.Notes &&
+		existing.Category == input.Category &&
+		existing.TotpSecret == input.TotpSecret
+	if !onlyFavorite {
+		if err := v.addVersion(*existing); err != nil {
+			return err
+		}
 	}
 	input.UpdatedAt = time.Now().UnixMilli()
 	if err := v.persistItem(input); err != nil {
@@ -333,28 +416,189 @@ func (v *Vault) update(input Item) error {
 		}
 	}
 	v.items[idx] = input
-	v.itemsBy[input.ID] = &v.items[idx]
-	sort.Slice(v.items, func(i, j int) bool {
-		return v.items[i].Title < v.items[j].Title
-	})
+	v.sortItems()
 	return nil
 }
 
+// trash soft-deletes an item (recoverable until purged).
+func (v *Vault) trash(id string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	it, ok := v.itemsBy[id]
+	if !ok {
+		return ErrItemNotFound
+	}
+	it.Deleted = true
+	it.DeletedAt = time.Now().UnixMilli()
+	if err := v.persistItem(*it); err != nil {
+		return err
+	}
+	return nil
+}
+
+// trashItems soft-deletes multiple items in a single transaction.
+func (v *Vault) trashItems(ids []string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	type change struct {
+		idx  int
+		item Item
+	}
+	var changes []change
+	now := time.Now().UnixMilli()
+	for i := range v.items {
+		if !contains(ids, v.items[i].ID) {
+			continue
+		}
+		ni := v.items[i]
+		ni.Deleted = true
+		ni.DeletedAt = now
+		changes = append(changes, change{i, ni})
+	}
+	tx, err := v.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, c := range changes {
+		if err := v.persistItemTx(tx, c.item); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, c := range changes {
+		v.items[c.idx] = c.item
+	}
+	return nil
+}
+
+// restoreTrashed brings a soft-deleted item back.
+func (v *Vault) restoreTrashed(id string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	it, ok := v.itemsBy[id]
+	if !ok || !it.Deleted {
+		return ErrItemNotFound
+	}
+	it.Deleted = false
+	it.DeletedAt = 0
+	return v.persistItem(*it)
+}
+
+// delete permanently removes an item, its versions and attachments.
 func (v *Vault) delete(id string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	if _, ok := v.itemsBy[id]; !ok {
 		return ErrItemNotFound
 	}
-	if _, err := v.db.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
+	tx, err := v.db.Begin()
+	if err != nil {
 		return err
 	}
-	_, _ = v.db.Exec(`DELETE FROM item_versions WHERE item_id = ?`, id)
-	delete(v.itemsBy, id)
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM item_versions WHERE item_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM attachments WHERE item_id = ?`, id); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
 	for i, it := range v.items {
 		if it.ID == id {
 			v.items = append(v.items[:i], v.items[i+1:]...)
 			break
 		}
 	}
+	v.rebuildIndex()
+	return nil
+}
+
+// purgeItems permanently removes multiple items (used by the trash view).
+func (v *Vault) purgeItems(ids []string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	tx, err := v.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, id := range ids {
+		if _, err := tx.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM item_versions WHERE item_id = ?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM attachments WHERE item_id = ?`, id); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	keep := v.items[:0]
+	for _, it := range v.items {
+		if !contains(ids, it.ID) {
+			keep = append(keep, it)
+		}
+	}
+	v.items = keep
+	v.rebuildIndex()
+	return nil
+}
+
+// purgeExpiredTrash removes trashed items older than the given retention.
+func (v *Vault) purgeExpiredTrash(days int) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if days <= 0 {
+		return nil
+	}
+	cutoff := time.Now().AddDate(0, 0, -days).UnixMilli()
+	var expired []string
+	for _, it := range v.items {
+		if it.Deleted && it.DeletedAt > 0 && it.DeletedAt < cutoff {
+			expired = append(expired, it.ID)
+		}
+	}
+	if len(expired) == 0 {
+		return nil
+	}
+	tx, err := v.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, id := range expired {
+		if _, err := tx.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM item_versions WHERE item_id = ?`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM attachments WHERE item_id = ?`, id); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	keep := v.items[:0]
+	for _, it := range v.items {
+		if !contains(expired, it.ID) {
+			keep = append(keep, it)
+		}
+	}
+	v.items = keep
+	v.rebuildIndex()
 	return nil
 }
 
@@ -374,7 +618,25 @@ func (v *Vault) persistItem(item Item) error {
 	return err
 }
 
+func (v *Vault) persistItemTx(tx *sql.Tx, item Item) error {
+	plain, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	blob, err := encrypt(v.vaultKey, plain)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO items (id, encrypted, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET encrypted = excluded.encrypted, updated_at = excluded.updated_at`,
+		item.ID, blob, item.CreatedAt, item.UpdatedAt)
+	return err
+}
+
 func (v *Vault) changeMasterPassword(oldPassword, newPassword string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	if oldPassword == newPassword {
 		return errors.New("new password must differ")
 	}
@@ -402,6 +664,10 @@ func (v *Vault) changeMasterPassword(oldPassword, newPassword string) error {
 		case metaVaultKey:
 			encVaultKey = b
 		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
 	}
 	rows.Close()
 	if salt == nil || encVaultKey == nil || paramsJSON == nil {
@@ -435,14 +701,38 @@ func (v *Vault) changeMasterPassword(oldPassword, newPassword string) error {
 		wipe(newSalt)
 		return err
 	}
-	_, err = v.db.Exec(`UPDATE meta SET value = ? WHERE key = ?`, newSalt, metaSaltKey)
-	if err == nil {
-		_, err = v.db.Exec(`UPDATE meta SET value = ? WHERE key = ?`, newEncVaultKey, metaVaultKey)
+
+	// atomic: both meta rows must change together or not at all
+	tx, err := v.db.Begin()
+	if err != nil {
+		wipe(salt)
+		wipe(newSalt)
+		wipe(newEncVaultKey)
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE meta SET value = ? WHERE key = ?`, newSalt, metaSaltKey); err != nil {
+		wipe(salt)
+		wipe(newSalt)
+		wipe(newEncVaultKey)
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE meta SET value = ? WHERE key = ?`, newEncVaultKey, metaVaultKey); err != nil {
+		wipe(salt)
+		wipe(newSalt)
+		wipe(newEncVaultKey)
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		wipe(salt)
+		wipe(newSalt)
+		wipe(newEncVaultKey)
+		return err
 	}
 	wipe(salt)
 	wipe(newSalt)
 	wipe(newEncVaultKey)
-	return err
+	return nil
 }
 
 const maxVersionsPerItem = 50
@@ -479,6 +769,8 @@ func (v *Vault) addVersion(item Item) error {
 }
 
 func (v *Vault) getVersions(itemID string) ([]VersionEntry, error) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
 	if v.vaultKey == nil {
 		return nil, ErrVaultLocked
 	}
@@ -509,10 +801,15 @@ func (v *Vault) getVersions(itemID string) ([]VersionEntry, error) {
 		normalizeItem(&item)
 		entries = append(entries, VersionEntry{ID: id, Timestamp: ts, Item: item})
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return entries, nil
 }
 
 func (v *Vault) restoreVersion(versionID string) (Item, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	if v.vaultKey == nil {
 		return Item{}, ErrVaultLocked
 	}
@@ -552,14 +849,13 @@ func (v *Vault) restoreVersion(versionID string) (Item, error) {
 		}
 	}
 	v.items[idx] = restored
-	v.itemsBy[restored.ID] = &v.items[idx]
-	sort.Slice(v.items, func(i, j int) bool {
-		return v.items[i].Title < v.items[j].Title
-	})
+	v.sortItems()
 	return restored, nil
 }
 
 func (v *Vault) setSetting(key, value string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	if v.db == nil {
 		return ErrVaultLocked
 	}
@@ -568,88 +864,15 @@ func (v *Vault) setSetting(key, value string) error {
 	return err
 }
 
-// ---------- Batch operations ----------
-
-func (v *Vault) deleteItems(ids []string) error {
-	if v.vaultKey == nil {
-		return ErrVaultLocked
-	}
-	valid := []string{}
-	keep := make([]Item, 0, len(v.items))
-	for _, it := range v.items {
-		if contains(ids, it.ID) {
-			valid = append(valid, it.ID)
-		} else {
-			keep = append(keep, it)
-		}
-	}
-	for _, id := range valid {
-		if _, err := v.db.Exec(`DELETE FROM items WHERE id = ?`, id); err != nil {
-			return err
-		}
-		_, _ = v.db.Exec(`DELETE FROM item_versions WHERE item_id = ?`, id)
-	}
-	v.items = keep
-	v.itemsBy = map[string]*Item{}
-	for i := range v.items {
-		v.itemsBy[v.items[i].ID] = &v.items[i]
-	}
-	return nil
-}
-
-func (v *Vault) setCategoryBatch(ids []string, category string) error {
-	for i := range v.items {
-		if contains(ids, v.items[i].ID) {
-			v.items[i].Category = category
-			if err := v.persistItem(v.items[i]); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (v *Vault) addTagBatch(ids []string, tag string) error {
-	tag = strings.ToLower(strings.TrimSpace(tag))
-	if tag == "" {
-		return errors.New("tag cannot be empty")
-	}
-	for i := range v.items {
-		if contains(ids, v.items[i].ID) {
-			if !contains(v.items[i].Tags, tag) {
-				v.items[i].Tags = append(v.items[i].Tags, tag)
-				if err := v.persistItem(v.items[i]); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (v *Vault) setFavoriteBatch(ids []string, favorite bool) error {
-	for i := range v.items {
-		if contains(ids, v.items[i].ID) {
-			v.items[i].Favorite = favorite
-			if err := v.persistItem(v.items[i]); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (v *Vault) itemsByIDs(ids []string) []Item {
-	out := []Item{}
-	for _, it := range v.items {
-		if contains(ids, it.ID) {
-			out = append(out, it)
-		}
-	}
-	return out
-}
-
+// getSetting must be called with the lock already held or before concurrency starts.
 func (v *Vault) getSetting(key string) (string, error) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return v.getSettingLocked(key)
+}
+
+// getSettingLocked reads a setting; caller must hold at least RLock.
+func (v *Vault) getSettingLocked(key string) (string, error) {
 	if v.db == nil {
 		return "", ErrVaultLocked
 	}
@@ -664,6 +887,220 @@ func (v *Vault) getSetting(key string) (string, error) {
 	return string(b), nil
 }
 
+// ---------- Batch operations (transactional) ----------
+
+func (v *Vault) setCategoryBatch(ids []string, category string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	type change struct {
+		idx  int
+		item Item
+	}
+	var changes []change
+	for i := range v.items {
+		if !contains(ids, v.items[i].ID) {
+			continue
+		}
+		ni := v.items[i]
+		ni.Category = category
+		changes = append(changes, change{i, ni})
+	}
+	tx, err := v.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, c := range changes {
+		if err := v.persistItemTx(tx, c.item); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, c := range changes {
+		v.items[c.idx] = c.item
+	}
+	return nil
+}
+
+func (v *Vault) addTagBatch(ids []string, tag string) error {
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	if tag == "" {
+		return errors.New("tag cannot be empty")
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	type change struct {
+		idx  int
+		item Item
+	}
+	var changes []change
+	for i := range v.items {
+		if !contains(ids, v.items[i].ID) {
+			continue
+		}
+		if !contains(v.items[i].Tags, tag) {
+			ni := v.items[i]
+			ni.Tags = append(append([]string{}, ni.Tags...), tag)
+			changes = append(changes, change{i, ni})
+		}
+	}
+	tx, err := v.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, c := range changes {
+		if err := v.persistItemTx(tx, c.item); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, c := range changes {
+		v.items[c.idx] = c.item
+	}
+	return nil
+}
+
+func (v *Vault) setFavoriteBatch(ids []string, favorite bool) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	type change struct {
+		idx  int
+		item Item
+	}
+	var changes []change
+	for i := range v.items {
+		if !contains(ids, v.items[i].ID) {
+			continue
+		}
+		ni := v.items[i]
+		ni.Favorite = favorite
+		changes = append(changes, change{i, ni})
+	}
+	tx, err := v.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, c := range changes {
+		if err := v.persistItemTx(tx, c.item); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, c := range changes {
+		v.items[c.idx] = c.item
+	}
+	return nil
+}
+
+func (v *Vault) itemsByIDs(ids []string) []Item {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	out := []Item{}
+	for _, it := range v.items {
+		if contains(ids, it.ID) {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+// ---------- Attachments (encrypted per file) ----------
+
+func (v *Vault) addAttachment(itemID, name string, data []byte) (Attachment, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.vaultKey == nil {
+		return Attachment{}, ErrVaultLocked
+	}
+	if _, ok := v.itemsBy[itemID]; !ok {
+		return Attachment{}, ErrItemNotFound
+	}
+	if len(data) == 0 {
+		return Attachment{}, errors.New("empty file")
+	}
+	if len(data) > maxAttachmentBytes {
+		return Attachment{}, ErrTooLarge
+	}
+	enc, err := encrypt(v.vaultKey, data)
+	if err != nil {
+		return Attachment{}, err
+	}
+	a := Attachment{
+		ID:      uuid.NewString(),
+		Name:    name,
+		Size:    int64(len(data)),
+		AddedAt: time.Now().UnixMilli(),
+	}
+	_, err = v.db.Exec(
+		`INSERT INTO attachments (id, item_id, name, encrypted, size, added_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		a.ID, itemID, a.Name, enc, a.Size, a.AddedAt,
+	)
+	return a, err
+}
+
+func (v *Vault) listAttachments(itemID string) ([]Attachment, error) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	rows, err := v.db.Query(
+		`SELECT id, name, size, added_at FROM attachments WHERE item_id = ? ORDER BY added_at`,
+		itemID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Attachment{}
+	for rows.Next() {
+		var a Attachment
+		if err := rows.Scan(&a.ID, &a.Name, &a.Size, &a.AddedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func (v *Vault) getAttachment(id string) (itemID, name string, data []byte, err error) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	var enc []byte
+	err = v.db.QueryRow(
+		`SELECT item_id, name, encrypted FROM attachments WHERE id = ?`, id,
+	).Scan(&itemID, &name, &enc)
+	if err != nil {
+		return "", "", nil, err
+	}
+	data, err = decrypt(v.vaultKey, enc)
+	return itemID, name, data, err
+}
+
+func (v *Vault) deleteAttachment(id string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	_, err := v.db.Exec(`DELETE FROM attachments WHERE id = ?`, id)
+	return err
+}
+
+// backupTo writes a consistent snapshot using SQLite's VACUUM INTO.
+func (v *Vault) backupTo(destPath string) error {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	if v.db == nil {
+		return ErrVaultLocked
+	}
+	q := fmt.Sprintf(`VACUUM INTO '%s'`, strings.ReplaceAll(destPath, "'", "''"))
+	_, err := v.db.Exec(q)
+	return err
+}
+
 func contains(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
@@ -671,4 +1108,16 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+func parseIntDefault(s string, def int) (int, error) {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return def, errors.New("invalid number")
+		}
+		n = n*10 + int(c-'0')
+	}
+	// 0 is valid (e.g. trash_days=0 means keep forever)
+	return n, nil
 }

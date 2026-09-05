@@ -108,7 +108,7 @@ func TestAnalyzeVault(t *testing.T) {
 	_, _ = v.create(Item{Type: TypeLogin, Title: "Secure", Password: "S3cur3#Pass!", URL: "https://e.com", TotpSecret: "JBSWY3DPEHPK3PXP"})
 
 	oldChecker := breachChecker
-	breachChecker = func(pw []string, w int) map[string]int { return map[string]int{} }
+	breachChecker = func(pw []string, w int) (map[string]int, bool) { return map[string]int{}, false }
 	defer func() { breachChecker = oldChecker }()
 
 	report := analyzeVault(v.list())
