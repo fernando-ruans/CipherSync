@@ -39,6 +39,7 @@ interface AppState {
     defaultType: ItemType
     init: () => Promise<void>
     newVault: () => void
+    backToVaults: () => void
     setup: (name: string, password: string, confirm: string) => Promise<void>
     unlock: (file: string, password: string) => Promise<void>
     lock: () => Promise<void>
@@ -105,12 +106,18 @@ export const useApp = create<AppState>((set, get) => ({
             const vaults = await api.listVaults()
             set({vaults, phase: vaults.length === 0 ? 'setup' : 'unlock'})
         } catch {
-            set({phase: 'setup'})
+            // unlock screen is the safe fallback: it lists whatever is on disk
+            // (possibly empty) and always offers the "new vault" way back
+            set({phase: 'unlock'})
         }
     },
 
     newVault: () => {
         set({phase: 'setup'})
+    },
+
+    backToVaults: () => {
+        set({phase: 'unlock'})
     },
 
     setup: async (name, password, confirm) => {
