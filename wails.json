@@ -6,6 +6,7 @@
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
+  "webview2": "embed",
   "author": {
     "name": "fernando-ruans",
     "email": "fernando_ruans@hotmail.com"

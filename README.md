@@ -71,7 +71,16 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 
 ### Para usuários (sem compilar)
 
-Baixe o executável mais recente em `build/bin/CipherSync.exe` (Windows) ou compile seguindo os passos abaixo. Requisitos de sistema: Windows 10+ com [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (já incluído no Windows 11) ou Linux com GTK3/WebKit.
+Baixe a versão mais recente na [página de Releases](https://github.com/fernando-ruans/CipherSync/releases/latest):
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `ciphersync-amd64-installer.exe` | **Instalador** (recomendado) — cria atalhos, registra o desinstalador e embute o WebView2 Runtime |
+| `CipherSync.exe` | Portable — roda direto, sem instalação |
+
+Requisitos: Windows 10 ou superior (x64). Para Linux, compile do código-fonte (dependências abaixo).
+
+> ⚠️ O executável ainda não é assinado digitalmente — se o Windows SmartScreen exibir um aviso, clique em **Mais informações → Executar assim mesmo**.
 
 ### Para desenvolvedores
 
@@ -333,9 +342,10 @@ Arquivos de teste de import em `testdata/`:
 
 ## Correções recentes
 
-### 2026-09-06 — Navegação e troca de cofres
+### v1.0.0 (2026-09-06) — primeiro release
 
-- **Botão de retorno na criação de cofre**: a tela "Criar seu cofre" agora tem sempre o link "‹ Todos os cofres", eliminando estados em que o usuário ficava preso sem conseguir voltar ou logar.
+- **Instalador oficial para Windows** (NSIS): atalhos, desinstalador e WebView2 Runtime embutido — funciona até em máquina sem internet.
+- **Botão de retorno na criação de cofre**: a tela "Criar seu cofre" tem sempre o link "‹ Todos os cofres", eliminando estados em que o usuário ficava preso sem conseguir voltar ou logar.
 - **Exclusão de cofre corrigida**: deletar um cofre não redireciona mais para a tela de criação — o app permanece na lista de cofres (mesmo vazia), com o botão "Novo cofre" sempre disponível.
 - **Troca de cofre atualiza a lista**: ao bloquear ("Trocar de cofre"), a lista de cofres é recarregada do backend — cofres criados durante a sessão aparecem imediatamente, sem precisar fechar e reabrir o app.
 - **Inicialização mais robusta**: se a listagem de cofres falhar ao abrir o app, cai na tela de desbloqueio (que oferece o caminho "Novo cofre") em vez da tela de criação.
