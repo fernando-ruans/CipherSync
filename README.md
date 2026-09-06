@@ -17,6 +17,7 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 ## Sumário
 
 - [Recursos](#recursos)
+- [Instalação e build](#instalação-e-build)
 - [Extensão de navegador — passo a passo](#extensão-de-navegador--passo-a-passo)
 - [Segurança](#segurança)
 - [Arquitetura](#arquitetura)
@@ -24,9 +25,9 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 - [Importação / Exportação](#importação--exportação)
 - [Sincronização](#sincronização)
 - [Atalhos de teclado](#atalhos-de-teclado)
-- [Build](#build)
 - [Estrutura do projeto](#estrutura-do-projeto)
 - [Testes](#testes)
+- [Correções recentes](#correções-recentes)
 - [Roadmap](#roadmap)
 - [Licença](#licença)
 
@@ -63,6 +64,54 @@ Criptografia local de ponta a ponta, sem servidores, sem telemetria — seus dad
 - **Importação** de Chrome, Firefox, Edge, LastPass, 1Password, Bitwarden e KeePass (.kdbx).
 - **Exportação** em CSV, JSON e transferência criptografada `.passapp` entre instâncias do CipherSync.
 - **Exclusão de conta** com confirmação por digitação (`DELETAR TUDO`).
+
+---
+
+## Instalação e build
+
+### Para usuários (sem compilar)
+
+Baixe o executável mais recente em `build/bin/CipherSync.exe` (Windows) ou compile seguindo os passos abaixo. Requisitos de sistema: Windows 10+ com [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (já incluído no Windows 11) ou Linux com GTK3/WebKit.
+
+### Para desenvolvedores
+
+Pré-requisitos: **Go 1.25+**, **Node 20+**, **Wails CLI** (e [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) no Windows).
+
+```bash
+# clone e entre no projeto
+git clone <url-do-repositorio>
+cd PassApp
+
+# instala o CLI do Wails (uma vez)
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+# instala as dependências do frontend
+cd frontend && npm install && cd ..
+
+# desenvolvimento com hot reload
+wails dev
+
+# build de produção (Windows: gera .exe + instalador NSIS se disponível)
+wails build
+
+# build limpo
+wails build -clean
+```
+
+O executável é gerado em `build/bin/`.
+
+#### Linux
+
+- Dependências nativas: `libgtk-3-dev`, `libwebkit2gtk-4.0-dev` (ou `-4.1`) e `build-essential`.
+- Clipboard/favicons usam ferramentas padrão do desktop (xclip/xsel ou wl-clipboard no Wayland).
+
+#### Ícone
+
+Para regenerar os ícones a partir de `ciphersync-logo.png`:
+
+```powershell
+.\make_icon.ps1
+```
 
 ---
 
@@ -232,41 +281,6 @@ O sync é **arquivo-inteiro com LWW (last-write-wins)** e cópias de conflito:
 
 ---
 
-## Build
-
-Pré-requisitos: **Go 1.25+**, **Node 20+**, **Wails CLI** (e [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) no Windows).
-
-```bash
-# instala o CLI do Wails (uma vez)
-go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-# desenvolvimento com hot reload
-wails dev
-
-# build de produção (Windows: gera .exe + instalador NSIS se disponível)
-wails build
-
-# build limpo
-wails build -clean
-```
-
-O executável é gerado em `build/bin/`.
-
-### Linux
-
-- Dependências nativas: `libgtk-3-dev`, `libwebkit2gtk-4.0-dev` (ou `-4.1`) e `build-essential`.
-- Clipboard/favicons usam ferramentas padrão do desktop (xclip/xsel ou wl-clipboard no Wayland).
-
-### Ícone
-
-Para regenerar os ícones a partir de `ciphersync-logo.png`:
-
-```powershell
-.\make_icon.ps1
-```
-
----
-
 ## Estrutura do projeto
 
 ```
@@ -314,6 +328,17 @@ Arquivos de teste de import em `testdata/`:
 - `1password_export.csv` — 50 cadastros no formato do 1Password
 - `chrome_passwords.csv` — 26 cadastros no formato do Chrome/Edge
 - `bitwarden_export.json` — 20 itens multi-tipo (6 logins, 5 notas, 5 cartões, 4 identidades)
+
+---
+
+## Correções recentes
+
+### 2026-09-06 — Navegação e troca de cofres
+
+- **Botão de retorno na criação de cofre**: a tela "Criar seu cofre" agora tem sempre o link "‹ Todos os cofres", eliminando estados em que o usuário ficava preso sem conseguir voltar ou logar.
+- **Exclusão de cofre corrigida**: deletar um cofre não redireciona mais para a tela de criação — o app permanece na lista de cofres (mesmo vazia), com o botão "Novo cofre" sempre disponível.
+- **Troca de cofre atualiza a lista**: ao bloquear ("Trocar de cofre"), a lista de cofres é recarregada do backend — cofres criados durante a sessão aparecem imediatamente, sem precisar fechar e reabrir o app.
+- **Inicialização mais robusta**: se a listagem de cofres falhar ao abrir o app, cai na tela de desbloqueio (que oferece o caminho "Novo cofre") em vez da tela de criação.
 
 ---
 

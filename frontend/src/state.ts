@@ -154,13 +154,20 @@ export const useApp = create<AppState>((set, get) => ({
                 favicons: {},
                 breachedIds: [],
             })
+            // refresh the vault list so vaults created during the session
+            // show up when switching vaults without restarting the app
+            try {
+                set({vaults: await api.listVaults()})
+            } catch {
+                // keep the current list if the refresh fails
+            }
         }
     },
 
     deleteVault: async (file) => {
         await api.deleteVault(file)
         const vaults = await api.listVaults()
-        set({vaults, phase: vaults.length === 0 ? 'setup' : 'unlock'})
+        set({vaults, phase: 'unlock'})
     },
 
     deleteAccount: async () => {

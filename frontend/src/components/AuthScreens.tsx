@@ -46,7 +46,6 @@ function LoadingButton({loading, children}: {loading: boolean; children: React.R
 export function SetupScreen() {
     const t = useT()
     const setup = useApp((s) => s.setup)
-    const vaults = useApp((s) => s.vaults)
     const backToVaults = useApp((s) => s.backToVaults)
     const [name, setName] = useState('')
     const [password, setPassword] = useState('')
@@ -66,14 +65,12 @@ export function SetupScreen() {
 
     return (
         <Shell>
-            {vaults.length > 0 && (
-                <button
-                    onClick={backToVaults}
-                    className="mb-3 flex items-center gap-1 text-xs text-mut transition-colors hover:text-ink"
-                >
-                    <ChevronLeft size={14}/> {t('auth.allVaults')}
-                </button>
-            )}
+            <button
+                onClick={backToVaults}
+                className="mb-3 flex items-center gap-1 text-xs text-mut transition-colors hover:text-ink"
+            >
+                <ChevronLeft size={14}/> {t('auth.allVaults')}
+            </button>
             <h2 className="mb-1 text-lg font-semibold text-ink">{t('auth.setupTitle')}</h2>
             <p className="mb-5 text-sm text-mut">
                 {t('auth.setupDesc')} <span className="text-soft">{t('auth.noRecover')}</span>
